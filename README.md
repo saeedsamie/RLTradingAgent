@@ -67,6 +67,15 @@ uvicorn main_webview:app --reload
 - `requirements.txt` — Python dependencies
 - `xauusd_5m_alpari_filled_indicated.csv` — Example processed data file
 
+## RL Trading Modules
+
+- `data_prep.py`: Data loading and missing interval checking
+- `trading_env.py`: Custom Gym trading environment
+- `train_agent.py`: RL agent training logic
+- `evaluate.py`: Evaluation and metrics
+- `plotting.py`: Plotting utilities
+- `run_rl_pipeline.py`: Main script to run the full pipeline
+
 ## Credits
 - [Alpari Tick Data](https://alpari.com/)
 - [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts)

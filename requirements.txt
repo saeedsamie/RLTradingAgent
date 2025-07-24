@@ -5,3 +5,6 @@ pandas_ta
 fastapi
 uvicorn
 jinja2
+gymnasium
+stable-baselines3
+matplotlib
