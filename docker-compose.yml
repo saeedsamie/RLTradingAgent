@@ -4,6 +4,7 @@ services:
     container_name: rltrader
     volumes:
       - ./dataset:/app/dataset
+      - ./models:/app/models 
     environment:
       - PYTHONUNBUFFERED=1
     command: python run_rl_pipeline.py

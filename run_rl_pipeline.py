@@ -4,7 +4,7 @@ from RL.train_agent import train_agent
 from data_prep import load_data, check_missing_intervals
 
 DATA_PATH = 'dataset/xauusd_5m_alpari_filled_indicated.csv'
-MODEL_PATH = 'ppo_trading.zip'
+MODEL_PATH = 'models/ppo_trading.zip'
 WINDOW_SIZE = 50
 TRAIN_RATIO = 0.8
 
