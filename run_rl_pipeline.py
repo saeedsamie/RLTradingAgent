@@ -8,6 +8,7 @@ DATA_PATH = 'dataset/xauusd_5m_alpari_filled_indicated.csv'
 MODEL_PATH = 'ppo_trading.zip'
 WINDOW_SIZE = 50
 TRAIN_RATIO = 0.8
+USE_CNN = True
 
 if __name__ == '__main__':
     # Load data
@@ -15,7 +16,7 @@ if __name__ == '__main__':
     print(f'Dataset loaded: {df.shape[0]} rows')
 
     # Check for missing intervals
-    check_missing_intervals(df, time_col=df.columns[0], freq='5T')
+    check_missing_intervals(df, time_col=df.columns[0], freq='5min')
 
     # Split train/test
     split_idx = int(len(df) * TRAIN_RATIO)
@@ -24,10 +25,10 @@ if __name__ == '__main__':
     print(f'Train: {train_df.shape[0]}, Test: {test_df.shape[0]}')
 
     # Train agent
-    model = train_agent(train_df, model_path=MODEL_PATH, window_size=WINDOW_SIZE)
+    model = train_agent(train_df, model_path=MODEL_PATH, window_size=WINDOW_SIZE, use_cnn=USE_CNN)
 
     # Evaluate agent
-    rewards, equity_curve = evaluate_agent(MODEL_PATH, test_df, window_size=WINDOW_SIZE)
+    rewards, equity_curve = evaluate_agent(MODEL_PATH, test_df, window_size=WINDOW_SIZE, use_cnn=USE_CNN)
     print(f'Cumulative return: {equity_curve[-1] - equity_curve[0]:.2f}')
     print(f'Sharpe ratio: {sharpe_ratio(rewards):.2f}')
     print(f'Max drawdown: {max_drawdown(equity_curve):.2%}')
