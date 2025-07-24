@@ -1,0 +1,7 @@
+pandas~=2.3.1
+numpy==1.26.4
+requests~=2.32.4
+pandas_ta
+fastapi
+uvicorn
+jinja2

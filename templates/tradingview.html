@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XAUUSD Custom Chart</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body { height: 90%; margin: 0; padding: 0; }
+        #tv_chart_container { height: 75vh; width: 100vw; }
+        #rsi_container { height: 15vh; width: 100vw; }
+        #error_msg { color: red; font-weight: bold; padding: 1em; }
+        #indicator_tooltip, #rsi_tooltip {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #fff;
+            border: 2px solid #222;
+            padding: 10px;
+            z-index: 1000;
+            font-family: monospace;
+            font-size: 15px;
+            display: none;
+            min-width: 120px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        #rsi_tooltip { top: 120px; left: 10px; }
+    </style>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div id="tv_chart_container"></div>
+    <div id="rsi_container"></div>
+    <div id="error_msg"></div>
+    <div id="indicator_tooltip"></div>
+    <div id="rsi_tooltip"></div>
+    <script>
+    window.addEventListener('DOMContentLoaded', function() {
+        const LWC = window.LightweightCharts || window;
+        if (!LWC.createChart) {
+            document.getElementById('error_msg').textContent = 'LightweightCharts library failed to load or is incompatible.';
+            return;
+        }
+        async function fetchCandles() {
+            const resp = await fetch('/api/candles');
+            return await resp.json();
+        }
+
+        function toTimestamp(dateStr) {
+            // Converts ISO string to seconds since epoch
+            return Math.floor(new Date(dateStr).getTime() / 1000);
+        }
+
+        function buildSeries(data) {
+            // Candles
+            const candles = data.map(row => ({
+                time: toTimestamp(row["index"]),
+                open: row["open"],
+                high: row["high"],
+                low: row["low"],
+                close: row["close"],
+                volume: row["volume"]
+            }));
+            // MAs
+            const ma20 = data.filter(row => row.ma20 !== undefined && row.ma20 !== null).map(row => ({ time: toTimestamp(row["index"]), value: row["ma20"] }));
+            const ma50 = data.filter(row => row.ma50 !== undefined && row.ma50 !== null).map(row => ({ time: toTimestamp(row["index"]), value: row["ma50"] }));
+            const ma200 = data.filter(row => row.ma200 !== undefined && row.ma200 !== null).map(row => ({ time: toTimestamp(row["index"]), value: row["ma200"] }));
+            // RSI
+            const rsi = data.filter(row => row.rsi !== undefined && row.rsi !== null).map(row => ({ time: toTimestamp(row["index"]), value: row["rsi"] }));
+            return { candles, ma20, ma50, ma200, rsi };
+        }
+
+        function findNearestValue(seriesData, time) {
+            if (!seriesData || !seriesData.length) return undefined;
+            // seriesData is sorted by time
+            let left = 0, right = seriesData.length - 1;
+            while (left < right) {
+                let mid = Math.floor((left + right) / 2);
+                if (seriesData[mid].time < time) left = mid + 1;
+                else right = mid;
+            }
+            // Now left is the closest >= time, check if previous is closer
+            if (left > 0 && Math.abs(seriesData[left].time - time) > Math.abs(seriesData[left - 1].time - time)) {
+                left = left - 1;
+            }
+            return seriesData[left].value;
+        }
+
+        function findNearestRSIValue(seriesData, time) {
+            if (!seriesData || !seriesData.length) return undefined;
+            let left = 0, right = seriesData.length - 1;
+            while (left < right) {
+                let mid = Math.floor((left + right) / 2);
+                if (seriesData[mid].time < time) left = mid + 1;
+                else right = mid;
+            }
+            if (left > 0 && Math.abs(seriesData[left].time - time) > Math.abs(seriesData[left - 1].time - time)) {
+                left = left - 1;
+            }
+            return seriesData[left].value;
+        }
+
+        async function renderChart() {
+            const data = await fetchCandles();
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                document.getElementById('error_msg').textContent = 'No candle data available.';
+                return;
+            }
+            const { candles, ma20, ma50, ma200, rsi } = buildSeries(data);
+
+            // Main chart
+            const chart = LWC.createChart(document.getElementById('tv_chart_container'), {
+                width: window.innerWidth,
+                height: window.innerHeight * 0.8,
+                layout: { background: { color: '#fff' }, textColor: '#222' },
+                grid: { vertLines: { color: '#eee' }, horzLines: { color: '#eee' } },
+                timeScale: { timeVisible: true, secondsVisible: false },
+                rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.2 } },
+            });
+            const candleSeries = chart.addCandlestickSeries();
+            candleSeries.setData(candles);
+            let ma20Series, ma50Series, ma200Series;
+            if (ma20.length) {
+                ma20Series = chart.addLineSeries({ color: 'blue', lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+                ma20Series.setData(ma20);
+            }
+            if (ma50.length) {
+                ma50Series = chart.addLineSeries({ color: 'orange', lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+                ma50Series.setData(ma50);
+            }
+            if (ma200.length) {
+                ma200Series = chart.addLineSeries({ color: 'purple', lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+                ma200Series.setData(ma200);
+            }
+
+            // Tooltip for indicators
+            const tooltip = document.getElementById('indicator_tooltip');
+            chart.subscribeCrosshairMove(param => {
+                let html = '';
+                let time = param && param.time ? param.time : (candles.length ? candles[candles.length-1].time : null);
+                if (time) {
+                    html += `<b>Time:</b> ${new Date(time * 1000).toLocaleString()}<br>`;
+                    if (ma20Series && ma20.length) {
+                        let v = (param.seriesPrices && param.seriesPrices.get(ma20Series)) || findNearestValue(ma20, time);
+                        html += `<span style="color:blue">MA20:</span> ${v !== undefined ? v.toFixed(2) : '–'}<br>`;
+                    }
+                    if (ma50Series && ma50.length) {
+                        let v = (param.seriesPrices && param.seriesPrices.get(ma50Series)) || findNearestValue(ma50, time);
+                        html += `<span style="color:orange">MA50:</span> ${v !== undefined ? v.toFixed(2) : '–'}<br>`;
+                    }
+                    if (ma200Series && ma200.length) {
+                        let v = (param.seriesPrices && param.seriesPrices.get(ma200Series)) || findNearestValue(ma200, time);
+                        html += `<span style="color:purple">MA200:</span> ${v !== undefined ? v.toFixed(2) : '–'}<br>`;
+                    }
+                    tooltip.innerHTML = html;
+                    tooltip.style.display = 'block';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+
+            // RSI chart below
+            if (rsi.length) {
+                const rsiChart = LWC.createChart(document.getElementById('rsi_container'), {
+                    width: window.innerWidth,
+                    height: window.innerHeight * 0.2,
+                    layout: { background: { color: '#fff' }, textColor: '#222' },
+                    grid: { vertLines: { color: '#eee' }, horzLines: { color: '#eee' } },
+                    timeScale: { timeVisible: true, secondsVisible: false },
+                    rightPriceScale: { scaleMargins: { top: 0.2, bottom: 0.2 } },
+                });
+                const rsiSeries = rsiChart.addLineSeries({ color: 'green', lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+                rsiSeries.setData(rsi);
+                // Add 70/30 lines
+                rsiChart.addLineSeries({ color: '#aaa', lineWidth: 1, priceLineVisible: false }).setData([
+                    { time: rsi[0]?.time, value: 70 },
+                    { time: rsi[rsi.length-1]?.time, value: 70 }
+                ]);
+                rsiChart.addLineSeries({ color: '#aaa', lineWidth: 1, priceLineVisible: false }).setData([
+                    { time: rsi[0]?.time, value: 30 },
+                    { time: rsi[rsi.length-1]?.time, value: 30 }
+                ]);
+                // Tooltip for RSI
+                const rsiTooltip = document.getElementById('rsi_tooltip');
+                rsiChart.subscribeCrosshairMove(param => {
+                    let html = '';
+                    let time = param && param.time ? param.time : (rsi.length ? rsi[rsi.length-1].time : null);
+                    if (time) {
+                        html += `<b>Time:</b> ${new Date(time * 1000).toLocaleString()}<br>`;
+                        let v = (param.seriesPrices && param.seriesPrices.get(rsiSeries)) || findNearestRSIValue(rsi, time);
+                        html += `<span style="color:green">RSI:</span> ${v !== undefined ? v.toFixed(2) : '–'}<br>`;
+                        rsiTooltip.innerHTML = html;
+                        rsiTooltip.style.display = 'block';
+                    } else {
+                        rsiTooltip.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        renderChart();
+    });
+    </script>
+</body>
+</html> 
