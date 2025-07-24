@@ -7,6 +7,7 @@ class TradingEnv(gym.Env):
     """
     Custom trading environment for RL with actions:
     0: Out, 1: Long, 2: Short
+    Uses flat (window_size, num_features) float32 observations for MlpPolicy.
     """
     metadata = {'render.modes': ['human']}
 
@@ -15,9 +16,10 @@ class TradingEnv(gym.Env):
         self.df = df.reset_index(drop=True)
         self.window_size = window_size
         self.current_step = window_size
+        self.num_features = df.shape[1] - 1
         self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(window_size, df.shape[1] - 1), dtype=np.float32
+            low=-np.inf, high=np.inf, shape=(window_size, self.num_features), dtype=np.float32
         )
         self.position = 0  # 0: Out, 1: Long, -1: Short
         self.entry_price = 0
@@ -33,8 +35,8 @@ class TradingEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_obs(self):
-        obs = self.df.iloc[self.current_step - self.window_size:self.current_step, 1:].values
-        return obs.astype(np.float32)
+        obs = self.df.iloc[self.current_step - self.window_size:self.current_step, 1:].values.astype(np.float32)
+        return obs
 
     def step(self, action):
         done = self.current_step >= len(self.df) - 1

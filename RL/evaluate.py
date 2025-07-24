@@ -1,13 +1,15 @@
 import numpy as np
+import torch
 from stable_baselines3 import PPO
 
 from RL.trading_env import TradingEnv
 
 
 def evaluate_agent(model_path, test_df, window_size=50):
-    """Run the trained agent on test data and collect results."""
+    """Run the trained agent on test data and collect results. Uses MlpPolicy."""
     env = TradingEnv(test_df, window_size=window_size)
-    model = PPO.load(model_path)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = PPO.load(model_path, device=device)
     obs, _ = env.reset()
     done = False
     rewards = []

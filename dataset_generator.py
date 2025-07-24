@@ -12,9 +12,11 @@ Pipeline for downloading, processing, and augmenting XAUUSD (Gold/USD) 5-minute 
 import io
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
 import pandas_ta as ta
 import requests
+
 
 def download_and_aggregate_month(year: int, month: int) -> pd.DataFrame:
     """
@@ -60,6 +62,7 @@ def download_and_aggregate_month(year: int, month: int) -> pd.DataFrame:
     ohlc['volume'] = month_df['price'].resample('5min').count()
     return ohlc.dropna()
 
+
 def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """
     Removes duplicate index rows from the DataFrame, keeping the first occurrence.
@@ -72,6 +75,7 @@ def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
         print(df.loc[duplicates])
     df = df[~df.index.duplicated(keep='first')]
     return df
+
 
 def fetch_range(start_year: int, start_month: int, end_year: int, end_month: int) -> pd.DataFrame:
     """
@@ -92,6 +96,7 @@ def fetch_range(start_year: int, start_month: int, end_year: int, end_month: int
         except requests.HTTPError:
             print(f"Failed download {dt.strftime('%Y-%m')}")
     return pd.concat(frames).sort_index() if frames else pd.DataFrame()
+
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -118,6 +123,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         print("Ichimoku could not be calculated for this input; skipping Ichimoku columns.")
     return df.dropna(how='all')
 
+
 def fill_time_series_holes(df: pd.DataFrame, method: str = 'interpolate') -> pd.DataFrame:
     """
     Reindexes the DataFrame to a complete 5-minute range and fills missing values.
@@ -137,6 +143,7 @@ def fill_time_series_holes(df: pd.DataFrame, method: str = 'interpolate') -> pd.
     else:
         raise ValueError("Method must be 'ffill', 'bfill', or 'interpolate'")
 
+
 def find_missing_intervals(df: pd.DataFrame) -> pd.DatetimeIndex:
     """
     Prints and returns missing 5-minute intervals in the DataFrame's index.
@@ -148,6 +155,7 @@ def find_missing_intervals(df: pd.DataFrame) -> pd.DatetimeIndex:
     print(f"Missing {len(missing)} intervals:")
     print(missing[:10])
     return missing
+
 
 def download_and_aggregate_month_thread(year: int, month: int) -> pd.DataFrame:
     """
@@ -187,6 +195,7 @@ def download_and_aggregate_month_thread(year: int, month: int) -> pd.DataFrame:
     ohlc['volume'] = month_df['price'].resample('5min').count()
     return ohlc.dropna()
 
+
 def fetch_range_parallel(start_year: int, start_month: int, end_year: int, end_month: int) -> pd.DataFrame:
     """
     Download and aggregate data for a range of months in parallel.
@@ -205,6 +214,7 @@ def fetch_range_parallel(start_year: int, start_month: int, end_year: int, end_m
             except Exception as e:
                 print(f"❗ {dt.strftime('%Y-%m')} failed:", e)
     return pd.concat(frames).sort_index() if frames else pd.DataFrame()
+
 
 if __name__ == "__main__":
     """
