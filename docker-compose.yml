@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   rltrader:
     build: .
@@ -7,4 +6,13 @@ services:
       - ./dataset:/app/dataset
     environment:
       - PYTHONUNBUFFERED=1
-    command: python run_rl_pipeline.py 
+    command: python run_rl_pipeline.py
+
+  datasetgen:
+    build: .
+    container_name: datasetgen
+    volumes:
+      - ./dataset:/app/dataset
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python dataset_generator.py
