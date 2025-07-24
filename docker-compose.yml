@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  rltrader:
+    build: .
+    container_name: rltrader
+    volumes:
+      - ./dataset:/app/dataset
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python run_rl_pipeline.py 
