@@ -98,16 +98,36 @@ def fetch_range(start_year: int, start_month: int, end_year: int, end_month: int
     return pd.concat(frames).sort_index() if frames else pd.DataFrame()
 
 
+def normalize_indicators(df: pd.DataFrame, exclude_cols=None) -> pd.DataFrame:
+    """
+    Min-max normalize all columns except those in exclude_cols.
+    Returns a new DataFrame with normalized indicator columns.
+    """
+    if exclude_cols is None:
+        exclude_cols = ['open', 'high', 'low', 'close', 'volume']
+    df = df.copy()
+    indicator_cols = [col for col in df.columns if col not in exclude_cols]
+    for col in indicator_cols:
+        col_min = df[col].min()
+        col_max = df[col].max()
+        if pd.notnull(col_min) and pd.notnull(col_max) and col_max != col_min:
+            df[col] = (df[col] - col_min) / (col_max - col_min)
+    return df
+
+
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Adds technical indicators (MA20, MA50, MA200, RSI, Ichimoku) to a DataFrame with OHLCV columns.
+    Adds technical indicators (MA20, MA50, MA200, RSI, Ichimoku, MACD, Stochastic, ATR, OBV) to a DataFrame with OHLCV columns.
     Returns a new DataFrame with indicator columns.
     """
     df = df.copy()
+    # Moving Averages
     df['ma20'] = ta.sma(df['close'], length=20)
     df['ma50'] = ta.sma(df['close'], length=50)
     df['ma200'] = ta.sma(df['close'], length=200)
+    # RSI
     df['rsi'] = ta.rsi(df['close'], length=14)
+    # Ichimoku
     ich = ta.ichimoku(df['high'], df['low'], df['close'], tenkan=9, kijun=26, senkou=52, include_chikou=True)
     if ich is not None and isinstance(ich, (list, tuple)) and ich[0] is not None:
         visible, _ = ich
@@ -121,6 +141,22 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df = df.join(visible)
     else:
         print("Ichimoku could not be calculated for this input; skipping Ichimoku columns.")
+    # MACD
+    macd = ta.macd(df['close'])
+    if macd is not None:
+        df = df.join(macd)
+    # Stochastic Oscillator
+    stoch = ta.stoch(df['high'], df['low'], df['close'])
+    if stoch is not None:
+        df = df.join(stoch)
+    # ATR
+    atr = ta.atr(df['high'], df['low'], df['close'], length=14)
+    if atr is not None:
+        df['atr'] = atr
+    # OBV
+    obv = ta.obv(df['close'], df['volume'])
+    if obv is not None:
+        df['obv'] = obv
     return df.dropna(how='all')
 
 
@@ -226,8 +262,9 @@ if __name__ == "__main__":
     5. Print info and check for missing intervals
     """
     # 1. Download and aggregate (parallel)
-    df5m = fetch_range_parallel(2015, 1, 2025, 7)
-    df5m.to_csv("xauusd_5m_alpari_raw.csv")
+    # df5m = fetch_range_parallel(2015, 1, 2025, 7)
+    # df5m.to_csv("xauusd_5m_alpari_raw.csv")
+    df5m = pd.read_csv("xauusd_5m_alpari_raw.csv", index_col=0, parse_dates=True)
     print(f"Raw 5m data saved: {len(df5m)} rows")
 
     # 2. Fill missing intervals
@@ -240,6 +277,12 @@ if __name__ == "__main__":
     df_ind.to_csv("xauusd_5m_alpari_filled_indicated.csv")
     df_ind.to_parquet("xauusd_5m_alpari.parquet")
     print(f"Indicated data saved: {len(df_ind)} rows")
+
+    # 3b. Save normalized dataset
+    df_norm = normalize_indicators(df_ind)
+    df_norm.to_csv("xauusd_5m_alpari_normalized.csv")
+    df_norm.to_parquet("xauusd_5m_alpari_normalized.parquet")
+    print(f"Normalized data saved: {len(df_norm)} rows")
 
     # 4. Optionally, check for missing intervals in the final file
     find_missing_intervals(df_ind)
