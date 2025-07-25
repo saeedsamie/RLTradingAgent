@@ -264,7 +264,7 @@ if __name__ == "__main__":
     # 1. Download and aggregate (parallel)
     # df5m = fetch_range_parallel(2015, 1, 2025, 7)
     # df5m.to_csv("xauusd_5m_alpari_raw.csv")
-    df5m = pd.read_csv("xauusd_5m_alpari_raw.csv", index_col=0, parse_dates=True)
+    df5m = pd.read_csv("../data/raw/xauusd_5m_alpari_raw.csv", index_col=0, parse_dates=True)
     print(f"Raw 5m data saved: {len(df5m)} rows")
 
     # 2. Fill missing intervals
