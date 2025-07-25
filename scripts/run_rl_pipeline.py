@@ -5,7 +5,7 @@ from RL.plotting import plot_equity_curve
 from RL.train_agent import train_agent
 from scripts.data_prep import load_data, check_missing_intervals
 
-DATA_PATH = 'data/processed/xauusd_5m_alpari_filled_indicated.csv'
+DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
 WINDOW_SIZE = 200
 MAX_EPISODE_STEPS = 10000
