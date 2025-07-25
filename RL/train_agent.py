@@ -5,8 +5,8 @@ from RL.custom_mixed_policy import MixedActionPolicy
 from RL.trading_env import TradingEnv
 
 
-def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=100_000, debug=True,
-                max_episode_steps=10000):
+def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
+                max_episode_steps=5_000_000):
     """Train PPO agent on the trading environment and save the model. Uses MixedActionPolicy."""
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [
