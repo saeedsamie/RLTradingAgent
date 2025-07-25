@@ -1,12 +1,12 @@
 import numpy as np
 import torch
 from stable_baselines3 import PPO
+
 from RL.custom_mixed_policy import MixedActionPolicy
 from RL.trading_env import TradingEnv
-import pandas as pd
 
 
-def evaluate_agent(model_path, test_df, window_size=50):
+def evaluate_agent(model_path, test_df, window_size=50, max_episode_steps=10000):
     """Run the trained agent on test data and collect results. Uses MixedActionPolicy."""
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [
@@ -17,7 +17,7 @@ def evaluate_agent(model_path, test_df, window_size=50):
     ]
     # Keep 'close' for price calculation in env
     filtered_df = test_df[['close'] + feature_cols].copy()
-    env = TradingEnv(filtered_df, window_size=window_size)
+    env = TradingEnv(filtered_df, window_size=window_size, debug=False, max_episode_steps=max_episode_steps)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = PPO.load(model_path, device=device, custom_policy=MixedActionPolicy)
     obs, _ = env.reset()
