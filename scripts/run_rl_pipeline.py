@@ -1,12 +1,12 @@
+import numpy as np
+
+from scripts.data_prep import load_data, check_missing_intervals
 from RL.evaluate import evaluate_agent, sharpe_ratio, max_drawdown
 from RL.plotting import plot_equity_curve
 from RL.train_agent import train_agent
-from data_prep import load_data, check_missing_intervals
-import numpy as np
-import pandas as pd
 
-DATA_PATH = '../data/processed/xauusd_5m_alpari_filled_indicated.csv'
-MODEL_PATH = '../models/ppo_trading.zip'
+DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
+MODEL_PATH = 'models/ppo_trading.zip'
 WINDOW_SIZE = 50
 TRAIN_RATIO = 0.8
 

@@ -1,7 +1,8 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
 
 
 def plot_equity_curve(
@@ -11,8 +12,14 @@ def plot_equity_curve(
         drawdown=None,
         window=50
 ):
-    # Ensure the 'plots' directory exists
-    os.makedirs('plots', exist_ok=True)
+    # Ensure the 'plots' directory exists at the project root
+    project_root = Path(__file__).resolve().parent.parent
+    plots_dir = project_root / 'plots'
+    plots_dir.mkdir(exist_ok=True)
+
+    # Helper to get full path for plots
+    def plot_path(filename):
+        return str(plots_dir / filename)
 
     # Equity curve
     plt.figure(figsize=(10, 5))
@@ -22,7 +29,7 @@ def plot_equity_curve(
     plt.ylabel('Equity')
     plt.grid()
     plt.tight_layout()
-    plt.savefig('../plots/equity_curve.png')
+    plt.savefig(plot_path('equity_curve.png'))
     plt.close()
 
     # Rewards over time
@@ -34,7 +41,7 @@ def plot_equity_curve(
         plt.ylabel('Reward')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/rewards_over_time.png')
+        plt.savefig(plot_path('rewards_over_time.png'))
         plt.close()
 
     # Drawdown curve
@@ -46,7 +53,7 @@ def plot_equity_curve(
         plt.ylabel('Drawdown')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/drawdown_curve.png')
+        plt.savefig(plot_path('drawdown_curve.png'))
         plt.close()
 
     # Histogram of returns
@@ -57,7 +64,7 @@ def plot_equity_curve(
         plt.xlabel('Return')
         plt.ylabel('Frequency')
         plt.tight_layout()
-        plt.savefig('../plots/returns_histogram.png')
+        plt.savefig(plot_path('returns_histogram.png'))
         plt.close()
 
     # Rolling Sharpe ratio
@@ -72,7 +79,7 @@ def plot_equity_curve(
         plt.ylabel('Sharpe Ratio')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/rolling_sharpe_ratio.png')
+        plt.savefig(plot_path('rolling_sharpe_ratio.png'))
         plt.close()
 
     # Rolling volatility
@@ -85,7 +92,7 @@ def plot_equity_curve(
         plt.ylabel('Volatility')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/rolling_volatility.png')
+        plt.savefig(plot_path('rolling_volatility.png'))
         plt.close()
 
     # Cumulative rewards
@@ -98,7 +105,7 @@ def plot_equity_curve(
         plt.ylabel('Cumulative Reward')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/cumulative_rewards.png')
+        plt.savefig(plot_path('cumulative_rewards.png'))
         plt.close()
 
     # Scatter plot: returns vs. equity
@@ -110,7 +117,7 @@ def plot_equity_curve(
         plt.xlabel('Return')
         plt.ylabel('Equity')
         plt.tight_layout()
-        plt.savefig('../plots/returns_vs_equity_scatter.png')
+        plt.savefig(plot_path('returns_vs_equity_scatter.png'))
         plt.close()
 
     # Moving average of equity
@@ -125,5 +132,5 @@ def plot_equity_curve(
         plt.legend()
         plt.grid()
         plt.tight_layout()
-        plt.savefig('../plots/equity_curve_with_ma.png')
+        plt.savefig(plot_path('equity_curve_with_ma.png'))
         plt.close()
