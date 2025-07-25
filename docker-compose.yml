@@ -4,18 +4,18 @@ services:
     container_name: rltrader
     volumes:
       - ./dataset:/app/dataset
-      - ./models:/app/models 
-      - ./plots:/app/plots 
+      - ./models:/app/models
+      - ./plots:/app/plots
     environment:
       - PYTHONUNBUFFERED=1
-    command: python run_rl_pipeline.py
+    command: python scripts/run_rl_pipeline.py
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
 
   datasetgen:
     build: .
@@ -24,4 +24,4 @@ services:
       - ./dataset:/app/dataset
     environment:
       - PYTHONUNBUFFERED=1
-    command: python dataset_generator.py
+    command: python scripts/dataset_generator.py
