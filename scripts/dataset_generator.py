@@ -264,24 +264,23 @@ if __name__ == "__main__":
     # 1. Download and aggregate (parallel)
     # df5m = fetch_range_parallel(2015, 1, 2025, 7)
     # df5m.to_csv("xauusd_5m_alpari_raw.csv")
-    df5m = pd.read_csv("../data/raw/xauusd_5m_alpari_raw.csv", index_col=0, parse_dates=True)
+    df5m = pd.read_csv("./data/raw/xauusd_5m_alpari_raw.csv", index_col=0, parse_dates=True)
     print(f"Raw 5m data saved: {len(df5m)} rows")
 
     # 2. Fill missing intervals
     df_filled = fill_time_series_holes(df5m, method='interpolate')
-    df_filled.to_csv("xauusd_5m_alpari_filled.csv")
+    df_filled.to_csv("./data/processed/xauusd_5m_alpari_filled.csv")
     print(f"Filled 5m data saved: {len(df_filled)} rows")
 
     # 3. Add indicators
     df_ind = add_indicators(df_filled)
-    df_ind.to_csv("xauusd_5m_alpari_filled_indicated.csv")
-    df_ind.to_parquet("xauusd_5m_alpari.parquet")
+    df_ind = df_ind.dropna()
+    df_ind.to_csv("./data/processed/xauusd_5m_alpari_filled_indicated.csv")
     print(f"Indicated data saved: {len(df_ind)} rows")
 
     # 3b. Save normalized dataset
     df_norm = normalize_indicators(df_ind)
-    df_norm.to_csv("xauusd_5m_alpari_normalized.csv")
-    df_norm.to_parquet("xauusd_5m_alpari_normalized.parquet")
+    df_norm.to_csv("./data/processed/xauusd_5m_alpari_normalized.csv")
     print(f"Normalized data saved: {len(df_norm)} rows")
 
     # 4. Optionally, check for missing intervals in the final file
