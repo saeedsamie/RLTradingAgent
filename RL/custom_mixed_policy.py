@@ -2,19 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from stable_baselines3.common.policies import BasePolicy
+from stable_baselines3.common.policies import ActorCriticPolicy
 from gymnasium import spaces
 
-class MixedActionPolicy(BasePolicy):
+class MixedActionPolicy(ActorCriticPolicy):
     def __init__(self, observation_space, action_space, lr_schedule, net_arch=None, activation_fn=nn.Tanh, *args, **kwargs):
-        super().__init__(observation_space, action_space, *args, **kwargs)
-        self.n_actions = action_space[0].n  # Discrete actions
+        super().__init__(observation_space, action_space, lr_schedule, net_arch=net_arch, activation_fn=activation_fn, *args, **kwargs)
+        input_dim = observation_space.shape[0] * observation_space.shape[1]
+        self.flatten = nn.Flatten()
         self.net_arch = net_arch or [64, 64]
         self.activation_fn = activation_fn
-        input_dim = observation_space.shape[0] * observation_space.shape[1]
-        # Flatten input
-        self.flatten = nn.Flatten()
-        # Shared MLP
         layers = []
         last_dim = input_dim
         for hidden in self.net_arch:
@@ -22,10 +19,8 @@ class MixedActionPolicy(BasePolicy):
             layers.append(self.activation_fn())
             last_dim = hidden
         self.mlp = nn.Sequential(*layers)
-        # Discrete action head
-        self.action_head = nn.Linear(last_dim, self.n_actions)
-        # Continuous confidence head
-        self.confidence_head = nn.Linear(last_dim, 1)
+        # Action head: output 2 values (action_type, confidence)
+        self.action_head = nn.Linear(last_dim, 2)
         # Value head
         self.value_head = nn.Linear(last_dim, 1)
         self._initialize_weights()
@@ -39,35 +34,39 @@ class MixedActionPolicy(BasePolicy):
     def forward(self, obs, deterministic=False):
         x = self.flatten(obs)
         x = self.mlp(x)
-        logits = self.action_head(x)
-        confidence = torch.sigmoid(self.confidence_head(x))  # (0,1)
+        action_out = self.action_head(x)
         value = self.value_head(x)
-        return logits, confidence, value
+        std = torch.ones_like(action_out) * 0.1
+        dist = torch.distributions.Normal(action_out, std)
+        if deterministic:
+            actions = torch.stack([
+                torch.round(action_out[..., 0]),
+                torch.clamp(action_out[..., 1], 0, 1)
+            ], dim=-1)
+        else:
+            sampled = dist.rsample()
+            action_type = torch.round(sampled[..., 0])
+            confidence = torch.clamp(sampled[..., 1], 0, 1)
+            actions = torch.stack([action_type, confidence], dim=-1)
+        log_prob = dist.log_prob(actions).sum(-1)
+        return actions, value, log_prob
 
     def _predict(self, observation, deterministic=False):
-        logits, confidence, _ = self.forward(observation, deterministic)
+        action_out, _, _ = self.forward(observation, deterministic)
         if deterministic:
-            action = torch.argmax(logits, dim=-1)
-            conf = confidence.squeeze(-1)
+            action_type = torch.round(action_out[..., 0])
+            confidence = torch.clamp(action_out[..., 1], 0, 1)
         else:
-            action_dist = torch.distributions.Categorical(logits=logits)
-            action = action_dist.sample()
-            conf_dist = torch.distributions.Normal(confidence, 0.1)
-            conf = torch.clamp(conf_dist.sample(), 0, 1).squeeze(-1)
-        # Return as tuple for env
-        return torch.stack([action.float(), conf], dim=-1)
+            action_type = torch.round(action_out[..., 0] + torch.randn_like(action_out[..., 0]) * 0.1)
+            confidence = torch.clamp(action_out[..., 1] + torch.randn_like(action_out[..., 1]) * 0.1, 0, 1)
+        return torch.stack([action_type, confidence], dim=-1)
 
     def evaluate_actions(self, obs, actions):
-        logits, confidence, value = self.forward(obs)
-        action_logits = logits
-        action_dist = torch.distributions.Categorical(logits=action_logits)
-        action = actions[:, 0].long()
-        log_prob = action_dist.log_prob(action)
-        entropy = action_dist.entropy()
-        # Confidence log prob (treat as Normal for simplicity)
-        conf = actions[:, 1].unsqueeze(-1)
-        conf_dist = torch.distributions.Normal(confidence, 0.1)
-        log_prob_conf = conf_dist.log_prob(conf).sum(-1)
-        total_log_prob = log_prob + log_prob_conf
-        total_entropy = entropy + conf_dist.entropy().sum(-1)
-        return value, total_log_prob, total_entropy 
+        action_out, value, _ = self.forward(obs)
+        # Assume Gaussian for both action_type and confidence
+        mean = action_out
+        std = torch.ones_like(mean) * 0.1
+        dist = torch.distributions.Normal(mean, std)
+        log_prob = dist.log_prob(actions).sum(-1)
+        entropy = dist.entropy().sum(-1)
+        return value, log_prob, entropy 

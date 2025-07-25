@@ -2,6 +2,8 @@ from RL.evaluate import evaluate_agent, sharpe_ratio, max_drawdown
 from RL.plotting import plot_equity_curve
 from RL.train_agent import train_agent
 from data_prep import load_data, check_missing_intervals
+import numpy as np
+import pandas as pd
 
 DATA_PATH = '../data/processed/xauusd_5m_alpari_filled_indicated.csv'
 MODEL_PATH = '../models/ppo_trading.zip'
@@ -30,5 +32,17 @@ if __name__ == '__main__':
     print(f'Sharpe ratio: {sharpe_ratio(rewards):.2f}')
     print(f'Max drawdown: {max_drawdown(equity_curve):.2%}')
 
-    # Plot results
-    plot_equity_curve(equity_curve)
+    # Prepare additional data for plotting
+    returns = np.array(rewards)
+    equity_curve_np = np.array(equity_curve)
+    drawdown = (equity_curve_np - np.maximum.accumulate(equity_curve_np)) / np.maximum.accumulate(equity_curve_np)
+    window = 50
+
+    # Plot results (all advanced plots)
+    plot_equity_curve(
+        equity_curve,
+        rewards=rewards,
+        returns=returns,
+        drawdown=drawdown,
+        window=window
+    )

@@ -20,12 +20,11 @@ class TradingEnv(gym.Env):
         self.df = df.reset_index(drop=True)
         self.window_size = window_size
         self.current_step = window_size
-        self.num_features = df.shape[1] - 1
-        # Action: (0=Out, 1=Long, 2=Short), Confidence (0-1)
-        self.action_space = spaces.Tuple([
-            spaces.Discrete(3),
-            spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
-        ])
+        # First column is 'close', rest are features
+        self.feature_cols = df.columns[1:]
+        self.num_features = len(self.feature_cols)
+        # Action: [action_type, confidence] where action_type in [0,2], confidence in [0,1]
+        self.action_space = spaces.Box(low=np.array([0, 0]), high=np.array([2, 1]), dtype=np.float32)
         # +3 for [balance, position, lot_size]
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(window_size, self.num_features + 3), dtype=np.float32
@@ -47,6 +46,7 @@ class TradingEnv(gym.Env):
         return self._get_obs(), {}
 
     def _get_obs(self):
+        # Only use feature columns (not 'close') for observation
         obs = self.df.iloc[self.current_step - self.window_size:self.current_step, 1:].values.astype(np.float32)
         # Add account state features to each row in the window
         balance_arr = np.full((self.window_size, 1), self.balance, dtype=np.float32)
@@ -58,13 +58,14 @@ class TradingEnv(gym.Env):
         return obs
 
     def step(self, action):
+        # action: [action_type, confidence]
         if isinstance(action, (np.ndarray, list)) and len(action) == 2:
-            act = int(action[0])
-            conf = float(action[1])
+            act = int(np.round(action[0]))
+            conf = float(np.clip(action[1], 0, 1))
             action = (act, conf)
         elif torch.is_tensor(action) and action.numel() == 2:
-            act = int(action[0].item())
-            conf = float(action[1].item())
+            act = int(torch.round(action[0]).item())
+            conf = float(torch.clamp(action[1], 0, 1).item())
             action = (act, conf)
         done = self.current_step >= len(self.df) - 1
         reward = 0
