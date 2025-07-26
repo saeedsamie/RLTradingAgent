@@ -23,8 +23,8 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_t
         env,
         verbose=1,
         device=device,
-        learning_rate=1e-4,
-        clip_range=0.1
+        learning_rate=1e-3,
+        clip_range=0.2
     )
     model.learn(total_timesteps=total_timesteps)
     model.save(model_path)

@@ -7,7 +7,7 @@ from scripts.data_prep import load_data, check_missing_intervals
 
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
-WINDOW_SIZE = 200
+WINDOW_SIZE = 1000
 MAX_EPISODE_STEPS = 10000
 TRAIN_RATIO = 0.8
 
@@ -29,7 +29,8 @@ if __name__ == '__main__':
         train_df,
         model_path=MODEL_PATH,
         window_size=WINDOW_SIZE,
-        max_episode_steps=MAX_EPISODE_STEPS
+        max_episode_steps=MAX_EPISODE_STEPS,
+        debug=False
     )
 
     # Evaluate agent
