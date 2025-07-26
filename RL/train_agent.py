@@ -1,13 +1,12 @@
 import torch
 from stable_baselines3 import PPO
 
-from RL.custom_mixed_policy import MixedActionPolicy
 from RL.trading_env import TradingEnv
 
 
 def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
                 max_episode_steps=5_000_000):
-    """Train PPO agent on the trading environment and save the model. Uses MixedActionPolicy."""
+    """Train PPO agent on the trading environment and save the model. Uses MlpPolicy."""
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [
         'ma20', 'ma50', 'ma200', 'rsi', 'ichimoku_conversion', 'ichimoku_base',
@@ -20,7 +19,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_t
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = PPO(
-        MixedActionPolicy,
+        "MlpPolicy",
         env,
         verbose=1,
         device=device,
