@@ -8,6 +8,7 @@ This project provides a pipeline for downloading, processing, and visualizing XA
 - **Data Cleaning:** Handles missing intervals and duplicate timestamps.
 - **FastAPI Backend:** Serves processed data and a web UI.
 - **Modern Chart UI:** Interactive candlestick chart with indicator overlays and tooltips, powered by TradingView Lightweight Charts.
+- **RL Training Dashboard:** Live web dashboard for monitoring RL agent training metrics in real time (see below).
 
 ## Requirements
 - Python 3.8+
@@ -22,6 +23,8 @@ This project provides a pipeline for downloading, processing, and visualizing XA
 - uvicorn
 - jinja2
 - orjson
+- stable-baselines3
+- gymnasium
 
 Install all dependencies with:
 ```bash
@@ -47,13 +50,35 @@ Example (in `dataset_generator.py`):
 # df_ind.to_parquet("xauusd_5m_alpari.parquet")
 ```
 
-### 2. Start the Web Server
+### 2. Train the RL Agent and Monitor Training
 
+Start a training run (e.g., using the pipeline script):
 ```bash
-uvicorn main_webview:app --reload
+python scripts/run_rl_pipeline.py
+```
+This will train the RL agent and log all training metrics to `plots/training_metrics.json`.
+
+#### Start the FastAPI Web Server
+In a separate terminal, run:
+```bash
+uvicorn web.main_webview:app --reload
 ```
 
-- The server will be available at [http://localhost:8000/](http://localhost:8000/)
+#### Open the Training Dashboard
+Go to [http://localhost:8000/training_dashboard](http://localhost:8000/training_dashboard) in your browser.
+- The dashboard will show live-updating plots of all training metrics, including:
+  - Episode reward, mean reward (100)
+  - Episode length, mean length (100)
+  - Loss
+  - Balance, equity, position
+  - Total trades, total commission, total/unrealized PnL
+  - Price, commission
+  - Learning rate
+  - Entropy
+- The dashboard auto-refreshes every 10 seconds.
+
+#### Test the API Directly
+You can also view the raw metrics at [http://localhost:8000/api/training_metrics](http://localhost:8000/api/training_metrics)
 
 ### 3. View the Chart
 - Open your browser and go to [http://localhost:8000/](http://localhost:8000/)
@@ -64,6 +89,7 @@ uvicorn main_webview:app --reload
 - `dataset_generator.py` — Data download, cleaning, and indicator pipeline
 - `main_webview.py` — FastAPI backend and API
 - `templates/tradingview.html` — Web UI (TradingView-style chart)
+- `templates/training_dashboard.html` — RL training dashboard (live metrics)
 - `requirements.txt` — Python dependencies
 - `xauusd_5m_alpari_filled_indicated.csv` — Example processed data file
 
@@ -71,7 +97,7 @@ uvicorn main_webview:app --reload
 
 - `data_prep.py`: Data loading and missing interval checking
 - `trading_env.py`: Custom Gym trading environment
-- `train_agent.py`: RL agent training logic
+- `train_agent.py`: RL agent training logic (with metrics logging)
 - `evaluate.py`: Evaluation and metrics
 - `plotting.py`: Plotting utilities
 - `run_rl_pipeline.py`: Main script to run the full pipeline
@@ -80,6 +106,7 @@ uvicorn main_webview:app --reload
 - [Alpari Tick Data](https://alpari.com/)
 - [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts)
 - [pandas_ta](https://github.com/twopirllc/pandas-ta)
+- [Stable Baselines3](https://github.com/DLR-RM/stable-baselines3)
 
 ## License
 MIT License 
