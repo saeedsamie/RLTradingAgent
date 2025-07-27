@@ -3,6 +3,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 import json
 import os
+import time
+from stable_baselines3.common.callbacks import CheckpointCallback
 
 from RL.trading_env import TradingEnv
 
@@ -84,8 +86,18 @@ class TrainingMetricsCallback(BaseCallback):
 
 
 def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
-                max_episode_steps=10000):
-    """Train PPO agent on the trading environment and save the model. Uses MlpPolicy."""
+                max_episode_steps=10000, checkpoint_dir='models/checkpoints', checkpoint_freq=100000):
+    """Train PPO agent on the trading environment and save the model. Uses MlpPolicy.
+    Args:
+        train_df: DataFrame with training data.
+        model_path: Path to save the final model.
+        window_size: Observation window size.
+        total_timesteps: Total timesteps to train.
+        debug: Enable debug logging.
+        max_episode_steps: Max steps per episode.
+        checkpoint_dir: Directory to save checkpoints.
+        checkpoint_freq: Save checkpoint every N steps.
+    """
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [
         'ma20', 'ma50', 'ma200', 'rsi', 'ichimoku_conversion', 'ichimoku_base',
@@ -106,7 +118,15 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_t
         clip_range=0.2
     )
     callback = TrainingMetricsCallback(log_path='plots/training_metrics.json')
-    model.learn(total_timesteps=total_timesteps, callback=callback)
+    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir, name_prefix='ppo_trading')
+    start_train = time.time()
+    model.learn(total_timesteps=total_timesteps, callback=[callback, checkpoint_callback])
+    elapsed_train = time.time() - start_train
     model.save(model_path)
     print(f'Model saved to {model_path}')
+    print(f'Total model.learn() time: {elapsed_train:.2f} seconds')
+    if hasattr(env, 'step_times') and len(env.step_times) > 0:
+        print(f'Average env.step() time: {sum(env.step_times)/len(env.step_times):.6f} seconds')
+    if hasattr(env, 'reset_times') and len(env.reset_times) > 0:
+        print(f'Average env.reset() time: {sum(env.reset_times)/len(env.reset_times):.6f} seconds')
     return model

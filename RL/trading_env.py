@@ -1,4 +1,5 @@
 import logging
+import time
 
 import gymnasium as gym
 import numpy as np
@@ -52,6 +53,7 @@ class TradingEnv(gym.Env):
             logger.info(f"Initial balance: ${self.initial_balance}")
 
     def reset(self, seed=None, options=None):
+        start_time = time.time()
         self.current_step = self.window_size
         self.position = 0  # 0: Out, 1: Long, -1: Short
         self.entry_price = 0
@@ -65,7 +67,12 @@ class TradingEnv(gym.Env):
         if self.debug:
             logger.info(f"Environment reset - Step: {self.current_step}, Balance: ${self.balance}")
 
-        return self._get_obs(), {}
+        result = self._get_obs(), {}
+        elapsed = time.time() - start_time
+        if not hasattr(self, 'reset_times'):
+            self.reset_times = []
+        self.reset_times.append(elapsed)
+        return result
 
     def _get_obs(self):
         # Only use feature columns (not 'close') for observation
@@ -79,6 +86,7 @@ class TradingEnv(gym.Env):
         return obs
 
     def step(self, action):
+        start_time = time.time()
         # action: 0=Out, 1=Long, 2=Short
         if isinstance(action, (np.ndarray, list)):
             action = int(action[0]) if hasattr(action, '__len__') and len(action) > 0 else int(action)
@@ -220,7 +228,12 @@ class TradingEnv(gym.Env):
             'commission': commission
         }
 
-        return self._get_obs(), reward, done, False, info
+        result = self._get_obs(), reward, done, False, info
+        elapsed = time.time() - start_time
+        if not hasattr(self, 'step_times'):
+            self.step_times = []
+        self.step_times.append(elapsed)
+        return result
 
     def render(self):
         pass
