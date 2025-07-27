@@ -5,7 +5,7 @@ from RL.trading_env import TradingEnv
 
 
 def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
-                max_episode_steps=5_000_000):
+                max_episode_steps=10000):
     """Train PPO agent on the trading environment and save the model. Uses MlpPolicy."""
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [

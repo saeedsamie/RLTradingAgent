@@ -8,3 +8,9 @@ jinja2
 gymnasium
 stable-baselines3
 matplotlib
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-watch>=4.2.0

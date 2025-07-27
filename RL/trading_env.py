@@ -81,9 +81,12 @@ class TradingEnv(gym.Env):
     def step(self, action):
         # action: 0=Out, 1=Long, 2=Short
         if isinstance(action, (np.ndarray, list)):
-            action = int(action[0]) if len(action) > 0 else int(action)
+            action = int(action[0]) if hasattr(action, '__len__') and len(action) > 0 else int(action)
         elif torch.is_tensor(action):
             action = int(action.item())
+        else:
+            # Handle scalar actions (integers)
+            action = int(action)
 
         # Check episode termination conditions
         done = (self.current_step >= len(self.df) - 1) or (
