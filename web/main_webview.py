@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import json
 
 app = FastAPI()
 
@@ -45,3 +46,16 @@ def get_candles():
     df = df.where(pd.notnull(df), None)
     data = df.to_dict(orient="records")
     return data
+
+
+@app.get("/api/training_metrics", response_class=ORJSONResponse)
+def get_training_metrics():
+    """
+    Returns the latest training metrics as JSON for live or on-demand plotting.
+    """
+    metrics_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'plots', 'training_metrics.json')
+    if not os.path.exists(metrics_path):
+        return {"error": "No training metrics found."}
+    with open(metrics_path, 'r') as f:
+        metrics = json.load(f)
+    return metrics

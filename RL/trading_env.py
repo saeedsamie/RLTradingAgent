@@ -199,7 +199,28 @@ class TradingEnv(gym.Env):
         if self.position != 0:
             reward -= 0.001
 
-        return self._get_obs(), reward, done, False, {}
+        # Calculate unrealized PnL
+        if self.position != 0:
+            if self.position == 1:
+                unrealized_pnl = (price - self.entry_price) * self.lot_size * 10000
+            else:  # position == -1
+                unrealized_pnl = (self.entry_price - price) * self.lot_size * 10000
+        else:
+            unrealized_pnl = 0.0
+
+        info = {
+            'balance': self.balance,
+            'equity': self.equity,
+            'position': self.position,
+            'total_trades': self.total_trades,
+            'total_commission': self.total_commission,
+            'total_pnl': self.total_pnl,
+            'unrealized_pnl': unrealized_pnl,
+            'price': price,
+            'commission': commission
+        }
+
+        return self._get_obs(), reward, done, False, info
 
     def render(self):
         pass
