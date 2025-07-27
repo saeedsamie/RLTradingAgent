@@ -1,5 +1,5 @@
 # Use official Python image
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+FROM python:3.11-slim
 
 # Set work directory
 WORKDIR /app
