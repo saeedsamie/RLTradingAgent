@@ -76,25 +76,54 @@ class TradingEnv(gym.Env):
 
     def _get_obs(self):
         # Only use feature columns (not 'close') for observation
-        obs = self.df.iloc[self.current_step - self.window_size:self.current_step, 1:].values.astype(np.float32)
+        start_idx = max(0, self.current_step - self.window_size)
+        end_idx = self.current_step
+        
+        # Ensure we have enough data
+        if end_idx > len(self.df):
+            raise ValueError(f"Current step {self.current_step} exceeds dataframe length {len(self.df)}")
+        
+        obs = self.df.iloc[start_idx:end_idx, 1:].values.astype(np.float32)
+        
+        # If we don't have enough data for the full window, pad with zeros
+        if obs.shape[0] < self.window_size:
+            padding_rows = self.window_size - obs.shape[0]
+            padding = np.zeros((padding_rows, obs.shape[1]), dtype=np.float32)
+            obs = np.vstack([padding, obs])
+        
         # Add account state features to each row in the window
         balance_arr = np.full((self.window_size, 1), self.balance, dtype=np.float32)
         position_arr = np.full((self.window_size, 1), self.position, dtype=np.float32)
         obs = np.concatenate([obs, balance_arr, position_arr], axis=1)
-        if np.isnan(obs).any() or np.isinf(obs).any():
+        
+        # Ensure obs is a numpy array before checking for NaN/inf
+        if isinstance(obs, np.ndarray) and (np.isnan(obs).any() or np.isinf(obs).any()):
             logger.warning(f"Observation contains NaN or inf at step {self.current_step}")
+        
         return obs
 
     def step(self, action):
         start_time = time.time()
         # action: 0=Out, 1=Long, 2=Short
-        if isinstance(action, (np.ndarray, list)):
-            action = int(action[0]) if hasattr(action, '__len__') and len(action) > 0 else int(action)
-        elif torch.is_tensor(action):
-            action = int(action.item())
-        else:
-            # Handle scalar actions (integers)
-            action = int(action)
+        try:
+            if isinstance(action, np.ndarray):
+                if action.size > 0:
+                    action = int(action.flat[0])
+                else:
+                    action = int(action)
+            elif isinstance(action, list):
+                if len(action) > 0:
+                    action = int(action[0])
+                else:
+                    action = int(action)
+            elif torch.is_tensor(action):
+                action = int(action.item())
+            else:
+                # Handle scalar actions (integers)
+                action = int(action)
+        except (TypeError, ValueError, IndexError) as e:
+            logger.warning(f"Error processing action {action} of type {type(action)}: {e}")
+            action = 0  # Default to 'Out' action
 
         # Check episode termination conditions
         done = (self.current_step >= len(self.df) - 1) or (
@@ -203,9 +232,57 @@ class TradingEnv(gym.Env):
         self.equity_curve.append(self.equity)
         self.current_step += 1
 
-        # Add small penalty for holding positions to encourage trading
-        if self.position != 0:
-            reward -= 0.001
+        # Improved reward function to prevent overfitting
+        if self.current_step > self.window_size:
+            # Calculate risk-adjusted reward
+            if len(self.equity_curve) > 1:
+                # Calculate rolling volatility (risk measure)
+                recent_equity = self.equity_curve[-min(50, len(self.equity_curve)):]
+                if len(recent_equity) > 1:
+                    returns = [(recent_equity[i] - recent_equity[i-1]) / recent_equity[i-1] 
+                              for i in range(1, len(recent_equity))]
+                    volatility = np.std(returns) if returns else 0.01
+                    
+                    # Risk-adjusted reward (Sharpe-like)
+                    if volatility > 0:
+                        risk_adjusted_reward = reward / (volatility + 0.01)
+                    else:
+                        risk_adjusted_reward = reward
+                else:
+                    risk_adjusted_reward = reward
+            else:
+                risk_adjusted_reward = reward
+            
+            # Add drawdown penalty
+            if len(self.equity_curve) > 1:
+                peak_equity = max(self.equity_curve)
+                current_drawdown = (peak_equity - self.equity) / peak_equity if peak_equity > 0 else 0
+                drawdown_penalty = -current_drawdown * 0.1  # Penalize drawdowns
+            else:
+                drawdown_penalty = 0
+            
+            # Add diversity penalty to encourage exploration
+            if hasattr(self, 'action_history'):
+                if len(self.action_history) > 10:
+                    recent_actions = self.action_history[-10:]
+                    action_diversity = len(set(recent_actions)) / 3.0  # 3 possible actions
+                    diversity_bonus = (action_diversity - 0.5) * 0.01  # Encourage diverse actions
+                else:
+                    diversity_bonus = 0
+            else:
+                diversity_bonus = 0
+                self.action_history = []
+            
+            # Combine all reward components
+            final_reward = risk_adjusted_reward + drawdown_penalty + diversity_bonus
+            
+            # Store action for diversity tracking
+            self.action_history.append(action)
+            
+            # Cap extreme rewards to prevent overfitting
+            final_reward = np.clip(final_reward, -100, 100)
+        else:
+            final_reward = reward
 
         # Calculate unrealized PnL
         if self.position != 0:
@@ -228,7 +305,7 @@ class TradingEnv(gym.Env):
             'commission': commission
         }
 
-        result = self._get_obs(), reward, done, False, info
+        result = self._get_obs(), final_reward, done, False, info
         elapsed = time.time() - start_time
         if not hasattr(self, 'step_times'):
             self.step_times = []

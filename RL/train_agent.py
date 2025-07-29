@@ -1,30 +1,90 @@
-import torch
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
 import json
 import os
 import time
+
+import torch
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 from RL.trading_env import TradingEnv
 
 
 class TrainingMetricsCallback(BaseCallback):
-    def __init__(self, log_path='plots/training_metrics.json', verbose=0):
+    def __init__(self, log_path='plots/training_metrics.json', verbose=0, save_freq=100000):
         super().__init__(verbose)
         self.log_path = log_path
+        self.save_freq = save_freq
         self.metrics = []
         self.recent_rewards = []
         self.recent_lengths = []
+        self.saved_metrics_num = 0
         self.window = 100  # For moving averages
+        self.training_start_time = time.time()  # Record training start time
         # Ensure directory exists
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
     def _on_step(self) -> bool:
         # Log episode reward, length, loss, custom info fields, learning rate, and entropy at the end of each episode
+        episode_data_found = False
+        
+        # Try to get loss values from the model's training process
+        current_loss = None
+        if hasattr(self.model, 'logger') and hasattr(self.model.logger, 'name_to_value'):
+            logger_values = self.model.logger.name_to_value
+            # Try to get the most recent loss value
+            current_loss = (
+                logger_values.get('train/policy_loss', None) or
+                logger_values.get('train/value_loss', None) or
+                logger_values.get('train/loss', None)
+            )
+        
+        # Also try to get loss from the model's internal state if available
+        if current_loss is None and hasattr(self.model, 'policy') and hasattr(self.model.policy, 'optimizer'):
+            try:
+                # This is a more direct approach to get loss values
+                if hasattr(self.model, '_last_loss'):
+                    current_loss = self.model._last_loss
+            except Exception:
+                pass
+        
+        # Try to get loss from the model's training logs
+        if current_loss is None and hasattr(self.model, 'logger'):
+            try:
+                # Access the logger's recorded values
+                if hasattr(self.model.logger, 'record') and hasattr(self.model.logger, 'name_to_value'):
+                    # Look for any loss-related keys
+                    for key, value in self.model.logger.name_to_value.items():
+                        if 'loss' in key.lower() and value is not None:
+                            current_loss = value
+                            break
+            except Exception:
+                pass
+        
+        # Try to get loss from the model's training process by accessing the model's internal state
+        if current_loss is None:
+            try:
+                # In PPO, loss values are typically available through the policy's training process
+                if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'optimizer'):
+                    # Try to access the last computed loss
+                    if hasattr(self.model, 'train') and hasattr(self.model.train, 'loss'):
+                        current_loss = self.model.train.loss
+            except Exception:
+                pass
+        
+        # Debug: Print all available logger keys to understand what's available
+        if self.verbose > 0 and self.num_timesteps % 10000 == 0:
+            if hasattr(self.model, 'logger') and hasattr(self.model.logger, 'name_to_value'):
+                print(f"Available logger keys at timestep {self.num_timesteps}:")
+                for key, value in self.model.logger.name_to_value.items():
+                    print(f"  {key}: {value}")
+        
         if len(self.locals.get('infos', [])) > 0:
             for info in self.locals['infos']:
                 if 'episode' in info:
+                    episode_data_found = True
+                    if self.verbose > 0:
+                        print(f"Episode data found at timestep {self.num_timesteps}")
                     reward = info['episode']['r']
                     length = info['episode']['l']
                     self.recent_rewards.append(reward)
@@ -54,17 +114,42 @@ class TrainingMetricsCallback(BaseCallback):
                             lr = float(self.model.lr_schedule(self.num_timesteps))
                         except Exception:
                             pass
-                    # Entropy (if available from logger)
+                    # Entropy and Loss (if available from logger)
                     entropy = None
+                    loss_from_logger = None
                     if hasattr(self.model, 'logger') and hasattr(self.model.logger, 'name_to_value'):
-                        entropy = self.model.logger.name_to_value.get('train/entropy_loss', None)
+                        logger_values = self.model.logger.name_to_value
+                        entropy = logger_values.get('train/entropy_loss', None)
+                        # Try different loss keys that might be available
+                        loss_from_logger = (
+                            logger_values.get('train/policy_loss', None) or
+                            logger_values.get('train/value_loss', None) or
+                            logger_values.get('train/loss', None)
+                        )
+                    # Use loss from logger if available, otherwise use from info
+                    final_loss = loss_from_logger if loss_from_logger is not None else loss
+                    
+                    # If we still don't have loss, try the current_loss from the beginning of the step
+                    if final_loss is None:
+                        final_loss = current_loss
+                    
+                    # Debug logging for loss values
+                    if self.verbose > 0 and (loss_from_logger is not None or loss is not None or current_loss is not None):
+                        print(f"Loss values at timestep {self.num_timesteps}:")
+                        print(f"  - From logger: {loss_from_logger}")
+                        print(f"  - From info: {loss}")
+                        print(f"  - Current loss: {current_loss}")
+                        print(f"  - Final loss: {final_loss}")
+                    # Calculate elapsed training time
+                    elapsed_time = time.time() - self.training_start_time
+                    
                     self.metrics.append({
                         'timesteps': self.num_timesteps,
                         'reward': reward,
                         'length': length,
                         'mean_reward_100': mean_reward,
                         'mean_length_100': mean_length,
-                        'loss': loss,
+                        'loss': final_loss,
                         'balance': balance,
                         'equity': equity,
                         'position': position,
@@ -72,17 +157,30 @@ class TrainingMetricsCallback(BaseCallback):
                         'total_commission': total_commission,
                         'total_pnl': total_pnl,
                         'unrealized_pnl': unrealized_pnl,
-                        'price': price,
                         'commission': commission,
                         'learning_rate': lr,
-                        'entropy': entropy
+                        'entropy': entropy,
+                        'training_time_seconds': elapsed_time
                     })
+                    self._save_metrics()
+
+        # Save metrics periodically during training based on timesteps, not just when episode data is available
+        # if self.saved_metrics_num < len(self.metrics):
+        #     self.saved_metrics_num = len(self.metrics)
+        #     self._save_metrics()
+
         return True
+
+    def _save_metrics(self):
+        """Save current metrics to file"""
+        print(f"Saving metrics at timestep {self.num_timesteps} with {len(self.metrics)} data points",
+              self.saved_metrics_num)
+        with open(self.log_path, 'w') as f:
+            json.dump(self.metrics, f)
 
     def _on_training_end(self) -> None:
         # Save metrics to file at the end of training
-        with open(self.log_path, 'w') as f:
-            json.dump(self.metrics, f)
+        self._save_metrics()
 
 
 def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
@@ -109,16 +207,35 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_t
     filtered_df = train_df[['close'] + feature_cols].copy()
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Improved PPO configuration to prevent overfitting
     model = PPO(
         "MlpPolicy",
         env,
         verbose=1,
         device=device,
-        learning_rate=1e-4,
-        clip_range=0.2
+        learning_rate=3e-4,  # Slightly higher learning rate for better exploration
+        clip_range=0.1,  # Reduced clip range for more stable training
+        ent_coef=0.01,  # Increased entropy coefficient for exploration
+        vf_coef=0.5,  # Reduced value function coefficient to prevent overfitting
+        max_grad_norm=0.5,  # Gradient clipping to prevent exploding gradients
+        n_steps=2048,  # Larger batch size for more stable updates
+        batch_size=64,  # Smaller batch size within each update
+        n_epochs=10,  # More epochs per update for better learning
+        gamma=0.99,  # Standard discount factor
+        gae_lambda=0.95,  # GAE lambda for advantage estimation
+        target_kl=0.01,  # Early stopping if KL divergence is too high
+        tensorboard_log="./logs/",  # Enable tensorboard logging
+        policy_kwargs={
+            "net_arch": [dict(pi=[256, 256], vf=[256, 256])],  # Deeper networks
+            "activation_fn": torch.nn.ReLU,
+            "ortho_init": True,  # Orthogonal initialization for better training
+        }
     )
-    callback = TrainingMetricsCallback(log_path='plots/training_metrics.json')
-    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir, name_prefix='ppo_trading')
+    
+    callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1)
+    checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir,
+                                             name_prefix='ppo_trading')
     start_train = time.time()
     model.learn(total_timesteps=total_timesteps, callback=[callback, checkpoint_callback])
     elapsed_train = time.time() - start_train
@@ -126,7 +243,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_t
     print(f'Model saved to {model_path}')
     print(f'Total model.learn() time: {elapsed_train:.2f} seconds')
     if hasattr(env, 'step_times') and len(env.step_times) > 0:
-        print(f'Average env.step() time: {sum(env.step_times)/len(env.step_times):.6f} seconds')
+        print(f'Average env.step() time: {sum(env.step_times) / len(env.step_times):.6f} seconds')
     if hasattr(env, 'reset_times') and len(env.reset_times) > 0:
-        print(f'Average env.reset() time: {sum(env.reset_times)/len(env.reset_times):.6f} seconds')
+        print(f'Average env.reset() time: {sum(env.reset_times) / len(env.reset_times):.6f} seconds')
     return model

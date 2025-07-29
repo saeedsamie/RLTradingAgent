@@ -8,6 +8,7 @@ jinja2
 gymnasium
 stable-baselines3
 matplotlib
+tensorboard
 
 # Testing dependencies
 pytest>=7.0.0
