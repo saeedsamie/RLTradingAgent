@@ -1,30 +1,36 @@
+import json
 import os
 
 import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, ORJSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import json
 
 app = FastAPI()
 
 # Set up templates directory
 templates = Jinja2Templates(directory="templates")
 
-# Serve static files (if needed for custom JS/CSS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Static files are not needed as the template uses CDN for libraries and inline CSS
 
 # Path to your filled and indicated CSV
 DATA_PATH = "xauusd_5m_alpari_filled_indicated.csv"
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/chart", response_class=HTMLResponse)
 def tradingview_widget(request: Request):
     """
     Serves the TradingView widget page.
     """
     return templates.TemplateResponse("tradingview.html", {"request": request})
+
+
+@app.get("/", response_class=HTMLResponse)
+def training_dashboard(request: Request):
+    """
+    Serves the RL training dashboard page.
+    """
+    return templates.TemplateResponse("training_dashboard.html", {"request": request})
 
 
 @app.get("/api/candles", response_class=ORJSONResponse)
@@ -37,7 +43,7 @@ def get_candles():
     df = pd.read_csv(DATA_PATH, index_col=0, parse_dates=True)
     df = df.reset_index()
     # Only keep the last 1000 rows
-    # df = df.tail(1000)
+    df = df.tail(1000)
     # Convert Timestamp to ISO string
     df['index'] = df['index'].astype(str)
     # Replace inf, -inf with None
