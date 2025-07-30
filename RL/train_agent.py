@@ -213,7 +213,17 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     # Keep 'close' for price calculation in env
     filtered_df = train_df[['close'] + feature_cols].copy()
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
+    print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
+    print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    if torch.cuda.is_available():
+        print(f"CUDA device: {torch.cuda.get_device_name(0)}")
+        print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
+        # Test CUDA functionality
+        test_tensor = torch.randn(100, 100).cuda()
+        print(f"CUDA test tensor device: {test_tensor.device}")
+        print(f"CUDA memory after test: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
     
     # Check for existing checkpoints to resume training
     import glob
@@ -235,6 +245,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
                     latest_checkpoint = checkpoint_file
     
     # Improved PPO configuration to prevent overfitting
+    print(f"Creating PPO model with device: {device}")
     model = PPO(
         "MlpPolicy",
         env,
@@ -253,7 +264,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         target_kl=0.01,  # Early stopping if KL divergence is too high
         tensorboard_log="./logs/",  # Enable tensorboard logging
         policy_kwargs={
-            "net_arch": [dict(pi=[256, 256], vf=[256, 256])],  # Deeper networks
+            "net_arch": dict(pi=[256, 256], vf=[256, 256]),  # Fixed: Use dict instead of list
             "activation_fn": torch.nn.ReLU,
             "ortho_init": True,  # Orthogonal initialization for better training
         }
@@ -269,6 +280,14 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     else:
         print("No checkpoint found. Starting training from scratch.")
         remaining_timesteps = total_timesteps
+    
+    # Verify model is on the correct device
+    print(f"Model device: {next(model.policy.parameters()).device}")
+    print(f"Policy device: {model.policy.device}")
+    print(f"Value function device: {next(model.policy.value_net.parameters()).device}")
+    if torch.cuda.is_available():
+        print(f"CUDA memory after model creation: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
+        print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
     
     callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1, total_timesteps=total_timesteps, resume_timesteps=latest_timesteps)
     checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir,
