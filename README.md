@@ -1,8 +1,15 @@
-# RLTradingAgent: Advanced RL Trading System with Real-Time Dashboard
+# RLTradingAgent: Advanced RL Trading System with Market Cycle Optimization
 
-A comprehensive Reinforcement Learning (RL) trading system for XAUUSD (Gold/USD) with an advanced web-based training dashboard. Features automated data processing, RL agent training with PPO algorithm, and a modern real-time monitoring interface.
+A comprehensive Reinforcement Learning (RL) trading system for XAUUSD (Gold/USD) with **market cycle-based configurations** and an advanced web-based training dashboard. Features automated data processing, optimized RL agent training with quarterly episodes, and a modern real-time monitoring interface.
 
 ## 🚀 Key Features
+
+### **Market Cycle Optimization** ⭐ **NEW**
+- **Quarterly Episodes**: 25,920 bars (90 days) for comprehensive market cycle learning
+- **Daily Windows**: 288 bars (1 day) for optimal pattern recognition
+- **Configurable Cycles**: Easy switching between hourly, daily, weekly, monthly, quarterly, and yearly cycles
+- **Optimized Timesteps**: 17.6M timesteps (20 epochs) for thorough learning
+- **Market-Aware Training**: Episodes match natural market cycles and patterns
 
 ### **Data Processing & Visualization**
 - **Automated Data Pipeline:** Downloads tick data from Alpari, aggregates to 5-minute OHLCV bars
@@ -15,6 +22,7 @@ A comprehensive Reinforcement Learning (RL) trading system for XAUUSD (Gold/USD)
 - **Custom Trading Environment:** Gymnasium-based environment with realistic trading mechanics
 - **Comprehensive Metrics:** Tracks rewards, loss, balance, equity, trades, PnL, learning rate, entropy
 - **Real-Time Training Time:** Accurate training duration tracking
+- **Market Cycle Learning:** Episodes designed to capture complete market cycles
 
 ### **Advanced Training Dashboard**
 - **Live Monitoring:** Real-time updates of all training metrics
@@ -37,6 +45,33 @@ The training dashboard displays 10 comprehensive charts:
 7. **PnL Chart** - Total and unrealized profit/loss
 8. **Learning Rate** - Policy learning rate (5-decimal precision)
 9. **Entropy Chart** - Policy entropy (10-decimal precision for tiny values)
+
+## 🎯 Market Cycle Configurations
+
+### **Available Configurations**
+```python
+# Short-term trading (2M timesteps)
+config = get_config('short_term')      # Hourly window, daily episodes
+
+# Balanced approach (5M timesteps)  
+config = get_config('medium_term')     # Daily window, weekly episodes
+
+# Trend following (10M timesteps)
+config = get_config('long_term')       # Weekly window, monthly episodes
+
+# Long-term trends (20M timesteps)
+config = get_config('trend_following') # Monthly window, quarterly episodes
+
+# Optimal learning (17.6M timesteps) ⭐ RECOMMENDED
+config = get_config('quarterly_focused') # Daily window, quarterly episodes
+```
+
+### **Why Quarterly Episodes Work Better**
+- **Complete Market Cycles**: 90-day episodes capture full quarterly patterns
+- **Seasonal Patterns**: Learns from earnings cycles and economic data
+- **Trend Recognition**: Better understanding of long-term market movements
+- **Realistic Trading**: Matches typical investment horizons
+- **Reduced Noise**: Filters out short-term market fluctuations
 
 ## 🛠️ Requirements
 
@@ -89,21 +124,31 @@ RLTradingAgent/
 ├── RL/                          # RL training modules
 │   ├── train_agent.py          # PPO training with metrics logging
 │   ├── trading_env.py          # Custom Gym trading environment
-│   └── data_prep.py           # Data loading and preprocessing
+│   ├── evaluate.py             # Agent evaluation functions
+│   └── plotting.py             # Advanced plotting utilities
 ├── web/                        # FastAPI backend
 │   └── main_webview.py        # API endpoints and server
 ├── templates/                  # Web interfaces
 │   ├── training_dashboard.html # Advanced RL training dashboard
 │   └── tradingview.html       # Interactive chart viewer
+├── scripts/                    # Pipeline scripts
+│   ├── run_rl_pipeline.py    # Complete training pipeline
+│   ├── config.py              # Market cycle configurations ⭐ NEW
+│   └── calculate_timesteps.py # Optimal timesteps calculator ⭐ NEW
 ├── plots/                      # Training outputs
 │   └── training_metrics.json  # Real-time training metrics
-├── scripts/                    # Pipeline scripts
-│   └── run_rl_pipeline.py    # Complete training pipeline
 └── data/                      # Market data files
-    └── xauusd_5m_alpari_filled_indicated.csv
+    └── xauusd_5m_alpari_normalized.csv
 ```
 
 ## 🔧 Advanced Features
+
+### **Market Cycle Optimization** ⭐ **NEW**
+- **Quarterly Episodes**: 25,920 bars (90 days) for comprehensive learning
+- **Daily Windows**: 288 bars (1 day) for optimal pattern recognition
+- **Configurable Timesteps**: 17.6M timesteps (20 epochs) for thorough training
+- **Market-Aware Training**: Episodes designed to capture complete market cycles
+- **Easy Configuration**: Switch between different cycle lengths with one line
 
 ### **Real-Time Dashboard Features**
 - **Floating Tooltips:** Professional tooltips that follow your mouse
@@ -117,6 +162,7 @@ RLTradingAgent/
 - **Trading Metrics:** Total trades, commission, PnL (realized/unrealized)
 - **Learning Metrics:** Learning rate, entropy with high precision
 - **Time Tracking:** Accurate training duration in seconds
+- **Market Cycle Metrics:** Episode length tracking with quarterly cycles
 
 ### **Data Processing**
 - **Missing Data Handling:** Interpolation and forward-fill methods
@@ -134,13 +180,35 @@ RLTradingAgent/
 
 ### **Monitor Training Progress**
 ```bash
-# Start training
+# Start training with quarterly episodes
 python scripts/run_rl_pipeline.py
 
 # In another terminal, start dashboard
 uvicorn web.main_webview:app --reload
 
 # Open browser to http://localhost:8000/training_dashboard
+```
+
+### **Experiment with Different Configurations**
+```bash
+# Test different market cycles
+python -c "
+from scripts.config import print_available_configs
+print_available_configs()
+"
+
+# Use monthly episodes instead
+python -c "
+from scripts.config import get_config
+config = get_config('long_term')
+print(f'Monthly config: {config}')
+"
+```
+
+### **Calculate Optimal Timesteps**
+```bash
+# Calculate optimal training parameters
+python scripts/calculate_timesteps.py
 ```
 
 ### **View Market Data**
@@ -199,4 +267,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-**Ready to train your RL trading agent? Start with `python scripts/run_rl_pipeline.py` and monitor progress at `http://localhost:8000/training_dashboard`!** 
+**Ready to train your RL trading agent with market cycle optimization? Start with `python scripts/run_rl_pipeline.py` and monitor progress at `http://localhost:8000/training_dashboard`!** 🚀 
