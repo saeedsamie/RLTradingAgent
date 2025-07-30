@@ -1,8 +1,14 @@
 import os
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import numpy as np
-import pandas as pd
-import pytest
 from RL.plotting import plot_equity_curve
+
 
 def test_plot_equity_curve_creates_files(tmp_path):
     # Prepare sample data
@@ -39,4 +45,4 @@ def test_plot_equity_curve_creates_files(tmp_path):
     ]
     for fname in expected_files:
         fpath = os.path.join('plots', fname)
-        assert os.path.exists(fpath), f"Plot file {fpath} was not created." 
+        assert os.path.exists(fpath), f"Plot file {fpath} was not created."

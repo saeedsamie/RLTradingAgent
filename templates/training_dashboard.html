@@ -1,0 +1,1181 @@
+<!-- training_dashboard.html: Shows live training metrics as a plot -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Training Dashboard</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f7f7f7; }
+        .container { max-width: 1400px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        h1 { text-align: center; margin-bottom: 20px; }
+        .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+        .chart-container { background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .chart-container h3 { margin: 0 0 10px 0; font-size: 14px; color: #333; }
+        .chart-wrapper { position: relative; height: 300px; }
+        .error { color: #c00; text-align: center; margin-top: 24px; }
+        .refresh-controls { 
+            text-align: center; 
+            margin: 20px 0; 
+            padding: 15px; 
+            background: #f8f9fa; 
+            border-radius: 8px; 
+            border: 1px solid #e9ecef; 
+        }
+        .refresh-controls label { 
+            margin-right: 10px; 
+            font-weight: bold; 
+            color: #333; 
+        }
+        .refresh-controls select { 
+            padding: 5px 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            margin-right: 10px; 
+        }
+        .refresh-controls button { 
+            padding: 5px 15px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+        }
+        .refresh-controls button:hover { 
+            background: #0056b3; 
+        }
+        .training-info { 
+            text-align: center; 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #e8f4fd; 
+            border-radius: 8px; 
+            border: 1px solid #bee5eb; 
+        }
+        .training-time { 
+            margin-bottom: 8px; 
+            font-size: 14px; 
+            color: #0c5460; 
+        }
+        .training-progress { 
+            font-size: 13px; 
+            color: #0c5460; 
+        }
+        .refresh-info { text-align: center; color: #666; font-size: 12px; margin-top: 10px; }
+        
+        .chart-tooltip {
+            position: absolute;
+            display: none;
+            padding: 8px;
+            box-sizing: border-box;
+            font-size: 12px;
+            text-align: left;
+            z-index: 1000;
+            pointer-events: none;
+            border: 1px solid;
+            border-radius: 2px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: white;
+            color: black;
+            min-width: 120px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Training Dashboard</h1>
+        <div class="training-info">
+            <div class="training-time">
+                <strong>Training Time:</strong> <span id="training-time">Calculating...</span>
+            </div>
+            <div class="training-progress">
+                <strong>Timesteps:</strong> <span id="total-timesteps">-</span> | 
+                <strong>Episodes:</strong> <span id="total-episodes">-</span>
+            </div>
+        </div>
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>Rewards</h3>
+                <div class="chart-wrapper">
+                    <div id="rewards-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Episode Lengths</h3>
+                <div class="chart-wrapper">
+                    <div id="lengths-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Loss</h3>
+                <div class="chart-wrapper">
+                    <div id="loss-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Balance</h3>
+                <div class="chart-wrapper">
+                    <div id="balance-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Equity</h3>
+                <div class="chart-wrapper">
+                    <div id="equity-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Position</h3>
+                <div class="chart-wrapper">
+                    <div id="position-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Total Trades</h3>
+                <div class="chart-wrapper">
+                    <div id="trades-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>PnL</h3>
+                <div class="chart-wrapper">
+                    <div id="pnl-chart"></div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Learning Rate</h3>
+                <div class="chart-wrapper">
+                    <div id="learning-rate-chart"></div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3>Entropy</h3>
+                <div class="chart-wrapper">
+                    <div id="entropy-chart"></div>
+                </div>
+            </div>
+        </div>
+        <div id="error-msg" class="error"></div>
+        <div class="refresh-controls">
+            <label for="refresh-interval">Refresh Interval:</label>
+            <select id="refresh-interval">
+                <option value="10">10 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60" selected>60 seconds</option>
+                <option value="120">2 minutes</option>
+                <option value="300">5 minutes</option>
+                <option value="600">10 minutes</option>
+                <option value="0">Manual refresh only</option>
+            </select>
+            <button id="refresh-now">Refresh Now</button>
+        </div>
+        <div class="refresh-info" id="refresh-info">Auto-refreshing every 60 seconds</div>
+    </div>
+    
+    <!-- Tooltips for each chart -->
+    <div id="rewards-tooltip" class="chart-tooltip"></div>
+    <div id="lengths-tooltip" class="chart-tooltip"></div>
+    <div id="loss-tooltip" class="chart-tooltip"></div>
+    <div id="balance-tooltip" class="chart-tooltip"></div>
+    <div id="equity-tooltip" class="chart-tooltip"></div>
+    <div id="position-tooltip" class="chart-tooltip"></div>
+    <div id="trades-tooltip" class="chart-tooltip"></div>
+    <div id="pnl-tooltip" class="chart-tooltip"></div>
+    <div id="learning-rate-tooltip" class="chart-tooltip"></div>
+    <div id="entropy-tooltip" class="chart-tooltip"></div>
+    
+    <script>
+    // Move tooltips to their respective chart containers
+    document.addEventListener('DOMContentLoaded', function() {
+        const rewardsChart = document.getElementById('rewards-chart');
+        const rewardsTooltip = document.getElementById('rewards-tooltip');
+        if (rewardsChart && rewardsTooltip) {
+            rewardsChart.appendChild(rewardsTooltip);
+        }
+        
+        const lengthsChart = document.getElementById('lengths-chart');
+        const lengthsTooltip = document.getElementById('lengths-tooltip');
+        if (lengthsChart && lengthsTooltip) {
+            lengthsChart.appendChild(lengthsTooltip);
+        }
+        
+        const lossChart = document.getElementById('loss-chart');
+        const lossTooltip = document.getElementById('loss-tooltip');
+        if (lossChart && lossTooltip) {
+            lossChart.appendChild(lossTooltip);
+        }
+        
+        const balanceChart = document.getElementById('balance-chart');
+        const balanceTooltip = document.getElementById('balance-tooltip');
+        if (balanceChart && balanceTooltip) {
+            balanceChart.appendChild(balanceTooltip);
+        }
+        
+        const equityChart = document.getElementById('equity-chart');
+        const equityTooltip = document.getElementById('equity-tooltip');
+        if (equityChart && equityTooltip) {
+            equityChart.appendChild(equityTooltip);
+        }
+        
+        const positionChart = document.getElementById('position-chart');
+        const positionTooltip = document.getElementById('position-tooltip');
+        if (positionChart && positionTooltip) {
+            positionChart.appendChild(positionTooltip);
+        }
+        
+        const tradesChart = document.getElementById('trades-chart');
+        const tradesTooltip = document.getElementById('trades-tooltip');
+        if (tradesChart && tradesTooltip) {
+            tradesChart.appendChild(tradesTooltip);
+        }
+        
+        const pnlChart = document.getElementById('pnl-chart');
+        const pnlTooltip = document.getElementById('pnl-tooltip');
+        if (pnlChart && pnlTooltip) {
+            pnlChart.appendChild(pnlTooltip);
+        }
+        
+        const learningChart = document.getElementById('learning-rate-chart');
+        const learningTooltip = document.getElementById('learning-rate-tooltip');
+        if (learningChart && learningTooltip) {
+            learningChart.appendChild(learningTooltip);
+        }
+        
+        const entropyChart = document.getElementById('entropy-chart');
+        const entropyTooltip = document.getElementById('entropy-tooltip');
+        if (entropyChart && entropyTooltip) {
+            entropyChart.appendChild(entropyTooltip);
+        }
+    });
+    </script>
+    
+    
+    
+    <script>
+
+    
+    async function fetchMetrics() {
+        const resp = await fetch('/api/training_metrics');
+        return await resp.json();
+    }
+    
+    function safeMap(metrics, key) { 
+        return metrics.map(m => m[key] !== undefined ? m[key] : null); 
+    }
+    
+    function updateTrainingInfo(metrics) {
+        if (!metrics || metrics.length === 0) return;
+        
+        // Get the latest timestep
+        const latestTimestep = Math.max(...metrics.map(m => m.timesteps));
+        const totalEpisodes = metrics.length;
+        
+        // Update timesteps and episodes display
+        document.getElementById('total-timesteps').textContent = latestTimestep.toLocaleString();
+        document.getElementById('total-episodes').textContent = totalEpisodes.toLocaleString();
+        
+        // Get the latest training time from metrics (real time from training agent)
+        const latestMetric = metrics[metrics.length - 1];
+        const trainingTimeSeconds = latestMetric.training_time_seconds || 0;
+        
+        // Convert to human readable format
+        const hours = Math.floor(trainingTimeSeconds / 3600);
+        const minutes = Math.floor((trainingTimeSeconds % 3600) / 60);
+        const seconds = Math.floor(trainingTimeSeconds % 60);
+        
+        let timeString = '';
+        if (hours > 0) {
+            timeString = `${hours}h ${minutes}m ${seconds}s`;
+        } else if (minutes > 0) {
+            timeString = `${minutes}m ${seconds}s`;
+        } else {
+            timeString = `${seconds}s`;
+        }
+        
+        document.getElementById('training-time').textContent = timeString;
+    }
+    
+    function createTradingViewChart(containerId, data, options = {}) {
+        const container = document.getElementById(containerId);
+        
+        if (!container) {
+            return null;
+        }
+        
+        if (window.charts && window.charts[containerId]) {
+            window.charts[containerId].remove();
+        }
+        if (!window.charts) window.charts = {};
+        
+        const chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth || 400,
+            height: container.clientHeight || 300,
+            layout: {
+                background: { color: '#ffffff' },
+                textColor: '#333',
+            },
+            grid: {
+                vertLines: { color: '#f0f0f0' },
+                horzLines: { color: '#f0f0f0' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: '#cccccc',
+                scaleMargins: {
+                    top: 0.1,
+                    bottom: 0.1,
+                },
+            },
+            timeScale: {
+                borderColor: '#cccccc',
+                timeVisible: true,
+                secondsVisible: false,
+                rightOffset: 12,
+                barSpacing: 3,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                lockVisibleTimeRangeOnResize: true,
+                rightBarStaysOnScroll: true,
+                borderVisible: false,
+                visible: true,
+                tickMarkFormatter: (time) => {
+                    return new Date(time * 1000).toLocaleDateString();
+                },
+            },
+            ...options
+        });
+        
+        // Apply crosshair options to hide labels
+        chart.applyOptions({
+            crosshair: {
+                horzLine: {
+                    visible: false,
+                    labelVisible: false,
+                },
+                vertLine: {
+                    labelVisible: false,
+                },
+            },
+        });
+        
+        window.charts[containerId] = chart;
+        return chart;
+    }
+    
+    function plotMetrics(metrics) {
+        if (!metrics || metrics.length === 0) {
+            return;
+        }
+        
+        const timesteps = metrics.map(m => m.timesteps);
+        
+        // Update training info
+        updateTrainingInfo(metrics);
+        
+        // Helper function to create line series data
+        function createLineData(values, color) {
+            // Convert timesteps to timestamps (seconds since epoch)
+            const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60); // Start from 1 minute ago
+            const data = values.map((value, index) => ({
+                time: baseTime + (index * 60), // Each point is 1 minute apart
+                value: value !== null && value !== undefined ? value : 0
+            })).filter((point, index) => point.value !== 0 || index === 0);
+            return data;
+        }
+        
+        try {
+        // Rewards Chart
+            const rewardsChart = createTradingViewChart('rewards-chart', null, {});
+            if (!rewardsChart) {
+                return;
+            }
+            const rewardsSeries = rewardsChart.addLineSeries({ color: '#4BC0C0', lineWidth: 2 });
+            const rewardsData = createLineData(safeMap(metrics, 'reward'));
+            rewardsSeries.setData(rewardsData);
+            
+            // Tooltip for Rewards Chart
+            const rewardsTooltip = document.getElementById('rewards-tooltip');
+            
+            const toolTipWidth = 120;
+            const toolTipHeight = 80;
+            const toolTipMargin = 15;
+            
+            rewardsChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > rewardsChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > rewardsChart.chartElement().clientHeight
+                ) {
+                    rewardsTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(rewardsSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        rewardsTooltip.style.display = 'block';
+                        rewardsTooltip.innerHTML = `
+                            <div style="color: #4BC0C0; font-weight: bold;">Rewards</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${data.value.toFixed(2)}
+                            </div>
+                            <div style="color: black;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = rewardsSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(rewardsChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        rewardsChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        rewardsTooltip.style.left = shiftedCoordinate + 'px';
+                        rewardsTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        rewardsTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Lengths Chart
+        
+        // Lengths Chart
+            const lengthsChart = createTradingViewChart('lengths-chart', null, {});
+            const lengthsSeries = lengthsChart.addLineSeries({ color: '#FF8C00', lineWidth: 2 });
+            const meanLengthsSeries = lengthsChart.addLineSeries({ color: '#800080', lineWidth: 2, lineStyle: 1 });
+            lengthsSeries.setData(createLineData(safeMap(metrics, 'length')));
+            meanLengthsSeries.setData(createLineData(safeMap(metrics, 'mean_length_100')));
+            
+            // Tooltip for Lengths Chart
+            const lengthsTooltip = document.getElementById('lengths-tooltip');
+            
+            lengthsChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > lengthsChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > lengthsChart.chartElement().clientHeight
+                ) {
+                    lengthsTooltip.style.display = 'none';
+                } else {
+                    const lengthData = param.seriesData.get(lengthsSeries);
+                    const meanLengthData = param.seriesData.get(meanLengthsSeries);
+                    
+                    if (lengthData || meanLengthData) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        lengthsTooltip.style.display = 'block';
+                        lengthsTooltip.innerHTML = `
+                            <div style="color: #FF8C00; font-weight: bold;">Episode Lengths</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${lengthData ? lengthData.value.toFixed(0) : 'N/A'}
+                            </div>
+                            <div style="color: #800080; font-size: 12px;">
+                                Mean: ${meanLengthData ? meanLengthData.value.toFixed(0) : 'N/A'}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = lengthsSeries.priceToCoordinate(lengthData ? lengthData.value : 0);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(lengthsChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        lengthsChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        lengthsTooltip.style.left = shiftedCoordinate + 'px';
+                        lengthsTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        lengthsTooltip.style.display = 'none';
+                    }
+                }
+            });
+        
+        // Loss Chart
+            const lossChart = createTradingViewChart('loss-chart', null, {});
+            const lossSeries = lossChart.addLineSeries({ color: '#DC143C', lineWidth: 2 });
+            lossSeries.setData(createLineData(safeMap(metrics, 'loss')));
+            
+            // Tooltip for Loss Chart
+            const lossTooltip = document.getElementById('loss-tooltip');
+            
+            lossChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > lossChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > lossChart.chartElement().clientHeight
+                ) {
+                    lossTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(lossSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        lossTooltip.style.display = 'block';
+                        lossTooltip.innerHTML = `
+                            <div style="color: #DC143C; font-weight: bold;">Loss</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${data.value.toFixed(4)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = lossSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(lossChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        lossChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        lossTooltip.style.left = shiftedCoordinate + 'px';
+                        lossTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        lossTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Balance Chart
+            const balanceChart = createTradingViewChart('balance-chart', null, {});
+            const balanceSeries = balanceChart.addLineSeries({ color: '#0000FF', lineWidth: 2 });
+            balanceSeries.setData(createLineData(safeMap(metrics, 'balance')));
+            
+            // Tooltip for Balance Chart
+            const balanceTooltip = document.getElementById('balance-tooltip');
+            
+            balanceChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > balanceChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > balanceChart.chartElement().clientHeight
+                ) {
+                    balanceTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(balanceSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        balanceTooltip.style.display = 'block';
+                        balanceTooltip.innerHTML = `
+                            <div style="color: #0000FF; font-weight: bold;">Balance</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                $${data.value.toFixed(2)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = balanceSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(balanceChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        balanceChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        balanceTooltip.style.left = shiftedCoordinate + 'px';
+                        balanceTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        balanceTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Equity Chart
+            const equityChart = createTradingViewChart('equity-chart', null, {});
+            const equitySeries = equityChart.addLineSeries({ color: '#00BFFF', lineWidth: 2 });
+            equitySeries.setData(createLineData(safeMap(metrics, 'equity')));
+            
+            // Tooltip for Equity Chart
+            const equityTooltip = document.getElementById('equity-tooltip');
+            
+            equityChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > equityChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > equityChart.chartElement().clientHeight
+                ) {
+                    equityTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(equitySeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        equityTooltip.style.display = 'block';
+                        equityTooltip.innerHTML = `
+                            <div style="color: #00BFFF; font-weight: bold;">Equity</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                $${data.value.toFixed(2)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = equitySeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(equityChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        equityChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        equityTooltip.style.left = shiftedCoordinate + 'px';
+                        equityTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        equityTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Position Chart (Bar Chart for TradingView)
+            const positionChart = createTradingViewChart('position-chart', null, {});
+            const positionSeries = positionChart.addHistogramSeries({ color: '#FF00FF' });
+            // Convert timesteps to timestamps for position data
+            const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+            const positionData = safeMap(metrics, 'position').map((value, index) => ({
+                time: baseTime + (index * 60),
+                value: value !== null && value !== undefined ? value : 0
+            }));
+            positionSeries.setData(positionData);
+            
+            // Tooltip for Position Chart
+            const positionTooltip = document.getElementById('position-tooltip');
+            
+            positionChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > positionChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > positionChart.chartElement().clientHeight
+                ) {
+                    positionTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(positionSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        const positionText = data.value === 1 ? 'Long' : data.value === -1 ? 'Short' : 'Flat';
+                        
+                        positionTooltip.style.display = 'block';
+                        positionTooltip.innerHTML = `
+                            <div style="color: #FF00FF; font-weight: bold;">Position</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${positionText}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Value: ${data.value} | Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = positionSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(positionChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        positionChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        positionTooltip.style.left = shiftedCoordinate + 'px';
+                        positionTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        positionTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Total Trades Chart
+            const tradesChart = createTradingViewChart('trades-chart', null, {});
+            const tradesSeries = tradesChart.addLineSeries({ color: '#0000FF', lineWidth: 2 });
+            tradesSeries.setData(createLineData(safeMap(metrics, 'total_trades')));
+            
+            // Tooltip for Total Trades Chart
+            const tradesTooltip = document.getElementById('trades-tooltip');
+            
+            tradesChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > tradesChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > tradesChart.chartElement().clientHeight
+                ) {
+                    tradesTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(tradesSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        tradesTooltip.style.display = 'block';
+                        tradesTooltip.innerHTML = `
+                            <div style="color: #0000FF; font-weight: bold;">Total Trades</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${data.value.toFixed(0)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = tradesSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(tradesChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        tradesChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        tradesTooltip.style.left = shiftedCoordinate + 'px';
+                        tradesTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        tradesTooltip.style.display = 'none';
+                    }
+                }
+            });
+        
+        // PnL Chart
+            const pnlChart = createTradingViewChart('pnl-chart', null, {});
+            const totalPnlSeries = pnlChart.addLineSeries({ color: '#8B4513', lineWidth: 2 });
+            const unrealizedPnlSeries = pnlChart.addLineSeries({ color: '#FFD700', lineWidth: 2, lineStyle: 1 });
+            totalPnlSeries.setData(createLineData(safeMap(metrics, 'total_pnl')));
+            unrealizedPnlSeries.setData(createLineData(safeMap(metrics, 'unrealized_pnl')));
+            
+            // Tooltip for PnL Chart
+            const pnlTooltip = document.getElementById('pnl-tooltip');
+            
+            pnlChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > pnlChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > pnlChart.chartElement().clientHeight
+                ) {
+                    pnlTooltip.style.display = 'none';
+                } else {
+                    const totalPnlData = param.seriesData.get(totalPnlSeries);
+                    const unrealizedPnlData = param.seriesData.get(unrealizedPnlSeries);
+                    
+                    if (totalPnlData || unrealizedPnlData) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        pnlTooltip.style.display = 'block';
+                        pnlTooltip.innerHTML = `
+                            <div style="color: #8B4513; font-weight: bold;">Profit & Loss</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                $${totalPnlData ? totalPnlData.value.toFixed(2) : 'N/A'}
+                            </div>
+                            <div style="color: #FFD700; font-size: 12px;">
+                                Unrealized: $${unrealizedPnlData ? unrealizedPnlData.value.toFixed(2) : 'N/A'}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = totalPnlSeries.priceToCoordinate(totalPnlData ? totalPnlData.value : 0);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(pnlChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        pnlChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        pnlTooltip.style.left = shiftedCoordinate + 'px';
+                        pnlTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        pnlTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Learning Rate Chart
+            const learningChart = createTradingViewChart('learning-rate-chart', null, {});
+            const learningSeries = learningChart.addLineSeries({ 
+                color: '#008080', 
+                lineWidth: 2,
+                priceFormat: {
+                    type: 'price',
+                    precision: 5,
+                    minMove: 0.00001
+                }
+            });
+            learningSeries.setData(createLineData(safeMap(metrics, 'learning_rate')));
+            
+            // Tooltip for Learning Rate Chart
+            const learningTooltip = document.getElementById('learning-rate-tooltip');
+            
+            learningChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > learningChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > learningChart.chartElement().clientHeight
+                ) {
+                    learningTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(learningSeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        learningTooltip.style.display = 'block';
+                        learningTooltip.innerHTML = `
+                            <div style="color: #008080; font-weight: bold;">Learning Rate</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${data.value.toFixed(5)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = learningSeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(learningChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        learningChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        learningTooltip.style.left = shiftedCoordinate + 'px';
+                        learningTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        learningTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Entropy Chart
+            const entropyChart = createTradingViewChart('entropy-chart', null, {});
+            const entropySeries = entropyChart.addLineSeries({
+                color: '#800000',
+                lineWidth: 2,
+                priceFormat: {
+                    type: 'price',
+                    precision: 10,
+                    minMove: 0.0000000001
+                } 
+            });
+            entropySeries.setData(createLineData(safeMap(metrics, 'entropy')));
+            
+            // Tooltip for Entropy Chart
+            const entropyTooltip = document.getElementById('entropy-tooltip');
+            
+            entropyChart.subscribeCrosshairMove(param => {
+                
+                if (
+                    param.point === undefined ||
+                    !param.time ||
+                    param.point.x < 0 ||
+                    param.point.x > entropyChart.chartElement().clientWidth ||
+                    param.point.y < 0 ||
+                    param.point.y > entropyChart.chartElement().clientHeight
+                ) {
+                    entropyTooltip.style.display = 'none';
+                } else {
+                    const data = param.seriesData.get(entropySeries);
+                    if (data && data.value !== undefined) {
+                        // Convert timestamp back to timestep for display
+                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
+                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
+                        
+                        entropyTooltip.style.display = 'block';
+                        entropyTooltip.innerHTML = `
+                            <div style="color: #800000; font-weight: bold;">Entropy</div>
+                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
+                                ${data.value.toFixed(10)}
+                            </div>
+                            <div style="color: black; font-size: 10px;">
+                                Timestep: ${timestep.toLocaleString()}
+                            </div>`;
+                        
+                        const coordinate = entropySeries.priceToCoordinate(data.value);
+                        let shiftedCoordinate = param.point.x - 60;
+                        
+                        if (coordinate === null) {
+                            return;
+                        }
+                        
+                        shiftedCoordinate = Math.max(
+                            0,
+                            Math.min(entropyChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
+                        );
+                        
+                        const coordinateY =
+                            coordinate - toolTipHeight - toolTipMargin > 0
+                                ? coordinate - toolTipHeight - toolTipMargin
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                        entropyChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
+                                        coordinate + toolTipMargin
+                                    )
+                                );
+                        
+                        entropyTooltip.style.left = shiftedCoordinate + 'px';
+                        entropyTooltip.style.top = coordinateY + 'px';
+                    } else {
+                        entropyTooltip.style.display = 'none';
+                    }
+                }
+            });
+            
+
+        } catch (error) {
+            // Error handling without console logs
+        }
+    }
+    async function updateDashboard() {
+        const errorMsg = document.getElementById('error-msg');
+        try {
+            const metrics = await fetchMetrics();
+            if(metrics.error) {
+                errorMsg.textContent = metrics.error;
+                return;
+            }
+            errorMsg.textContent = '';
+            plotMetrics(metrics);
+        } catch (e) {
+            errorMsg.textContent = 'Failed to fetch training metrics.';
+        }
+    }
+    // Dynamic refresh control
+    let refreshInterval = null;
+    let currentRefreshTime = 60; // Default 60 seconds
+    
+    function startRefreshTimer(seconds) {
+        // Clear existing timer
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+        
+        // Start new timer if seconds > 0
+        if (seconds > 0) {
+            refreshInterval = setInterval(updateDashboard, seconds * 1000);
+            updateRefreshInfo(seconds);
+        } else {
+            updateRefreshInfo(0);
+        }
+    }
+    
+    function updateRefreshInfo(seconds) {
+        const refreshInfo = document.getElementById('refresh-info');
+        if (seconds === 0) {
+            refreshInfo.textContent = 'Manual refresh only';
+        } else if (seconds < 60) {
+            refreshInfo.textContent = `Auto-refreshing every ${seconds} seconds`;
+        } else if (seconds < 120) {
+            refreshInfo.textContent = `Auto-refreshing every ${seconds} seconds`;
+        } else {
+            const minutes = Math.floor(seconds / 60);
+            refreshInfo.textContent = `Auto-refreshing every ${minutes} minutes`;
+        }
+    }
+    
+    // Event listeners for refresh controls
+    document.getElementById('refresh-interval').addEventListener('change', function() {
+        const seconds = parseInt(this.value);
+        currentRefreshTime = seconds;
+        startRefreshTimer(seconds);
+    });
+    
+    document.getElementById('refresh-now').addEventListener('click', function() {
+        updateDashboard();
+    });
+    
+    // Initial load and periodic refresh
+    updateDashboard();
+    startRefreshTimer(currentRefreshTime);
+    
+
+    </script>
+</body>
+</html> 

@@ -8,7 +8,8 @@ services:
       - ./plots:/app/plots
     environment:
       - PYTHONUNBUFFERED=1
-    command: python -m scripts.run_rl_pipeline
+    ports:
+      - "8000:8000"
     deploy:
       resources:
         reservations:

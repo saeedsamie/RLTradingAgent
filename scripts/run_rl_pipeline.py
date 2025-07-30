@@ -7,7 +7,7 @@ from scripts.data_prep import load_data, check_missing_intervals
 
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
-WINDOW_SIZE = 1000
+WINDOW_SIZE = 100
 MAX_EPISODE_STEPS = 10000
 TRAIN_RATIO = 0.8
 
