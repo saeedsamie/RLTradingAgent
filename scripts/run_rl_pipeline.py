@@ -16,6 +16,10 @@ MAX_EPISODE_STEPS = config['max_episode_steps']
 TOTAL_TIMESTEPS = config['total_timesteps']
 TRAIN_RATIO = config['train_ratio']
 
+# Add command line argument for fresh start
+import sys
+FRESH_START = '--fresh-start' in sys.argv
+
 if __name__ == '__main__':
     print(f"Using configuration: {config['description']}")
     print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE/288:.1f} days)")
@@ -34,6 +38,17 @@ if __name__ == '__main__':
     train_df = df.iloc[:split_idx].reset_index(drop=True)
     test_df = df.iloc[split_idx:].reset_index(drop=True)
     print(f'Train: {train_df.shape[0]}, Test: {test_df.shape[0]}')
+
+    # Handle fresh start option
+    if FRESH_START:
+        import os
+        import glob
+        print("Fresh start requested. Clearing existing checkpoints...")
+        checkpoint_files = glob.glob('models/checkpoints/ppo_trading_*_steps.zip')
+        for file in checkpoint_files:
+            os.remove(file)
+            print(f"Removed: {file}")
+        print("Starting training from scratch.")
 
     # Train agent
     model = train_agent(

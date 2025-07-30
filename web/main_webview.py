@@ -65,3 +65,21 @@ def get_training_metrics():
     with open(metrics_path, 'r') as f:
         metrics = json.load(f)
     return metrics
+
+
+@app.get("/api/training_config", response_class=ORJSONResponse)
+def get_training_config():
+    """
+    Returns the current training configuration including total timesteps.
+    """
+    try:
+        from scripts.config import get_config
+        config = get_config('quarterly_focused')  # Default config
+        return {
+            "total_timesteps": config['total_timesteps'],
+            "description": config['description'],
+            "window_size": config['window_size'],
+            "max_episode_steps": config['max_episode_steps']
+        }
+    except Exception as e:
+        return {"error": f"Failed to load config: {str(e)}"}

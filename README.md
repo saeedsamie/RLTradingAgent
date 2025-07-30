@@ -99,8 +99,11 @@ python dataset_generator.py
 
 ### 2. **Train RL Agent**
 ```bash
-# Start training with live monitoring
+# Start training with live monitoring (automatically resumes from latest checkpoint)
 python scripts/run_rl_pipeline.py
+
+# Start training from scratch (ignores existing checkpoints)
+python scripts/run_rl_pipeline.py --fresh-start
 ```
 
 ### 3. **Launch Web Dashboard**
@@ -180,13 +183,31 @@ RLTradingAgent/
 
 ### **Monitor Training Progress**
 ```bash
-# Start training with quarterly episodes
+# Start training with quarterly episodes (auto-resumes from checkpoint)
 python scripts/run_rl_pipeline.py
+
+# Start training from scratch
+python scripts/run_rl_pipeline.py --fresh-start
 
 # In another terminal, start dashboard
 uvicorn web.main_webview:app --reload
 
 # Open browser to http://localhost:8000/training_dashboard
+```
+
+### **Manage Checkpoints**
+```bash
+# List all available checkpoints
+python scripts/manage_checkpoints.py list
+
+# Remove all checkpoints (start fresh)
+python scripts/manage_checkpoints.py clear
+
+# Backup all checkpoints
+python scripts/manage_checkpoints.py backup
+
+# Show latest checkpoint info
+python scripts/manage_checkpoints.py latest
 ```
 
 ### **Experiment with Different Configurations**

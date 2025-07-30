@@ -61,6 +61,10 @@
             font-size: 13px; 
             color: #0c5460; 
         }
+        .training-estimation { 
+            font-size: 13px; 
+            color: #0c5460; 
+        }
         .refresh-info { text-align: center; color: #666; font-size: 12px; margin-top: 10px; }
         
         .chart-tooltip {
@@ -95,6 +99,10 @@
             <div class="training-progress">
                 <strong>Timesteps:</strong> <span id="total-timesteps">-</span> | 
                 <strong>Episodes:</strong> <span id="total-episodes">-</span>
+            </div>
+            <div class="training-estimation">
+                <strong>Progress:</strong> <span id="progress-percentage">-</span> | 
+                <strong>Remaining Time:</strong> <span id="remaining-time">Calculating...</span>
             </div>
         </div>
         <div class="charts-grid">
@@ -264,11 +272,16 @@
         return await resp.json();
     }
     
+    async function fetchTrainingConfig() {
+        const resp = await fetch('/api/training_config');
+        return await resp.json();
+    }
+    
     function safeMap(metrics, key) { 
         return metrics.map(m => m[key] !== undefined ? m[key] : null); 
     }
     
-    function updateTrainingInfo(metrics) {
+    async function updateTrainingInfo(metrics) {
         if (!metrics || metrics.length === 0) return;
         
         // Get the latest timestep
@@ -298,6 +311,50 @@
         }
         
         document.getElementById('training-time').textContent = timeString;
+        
+        // Calculate remaining time estimation
+        try {
+            const config = await fetchTrainingConfig();
+            if (config.error) {
+                document.getElementById('progress-percentage').textContent = 'N/A';
+                document.getElementById('remaining-time').textContent = 'Config error';
+                return;
+            }
+            
+            const totalTimesteps = config.total_timesteps;
+            const progressPercentage = (latestTimestep / totalTimesteps * 100).toFixed(1);
+            
+            // Update progress percentage
+            document.getElementById('progress-percentage').textContent = `${progressPercentage}%`;
+            
+            // Calculate remaining time
+            if (latestTimestep > 0 && trainingTimeSeconds > 0) {
+                const timestepsPerSecond = latestTimestep / trainingTimeSeconds;
+                const remainingTimesteps = totalTimesteps - latestTimestep;
+                const remainingSeconds = remainingTimesteps / timestepsPerSecond;
+                
+                // Convert remaining time to human readable format
+                const remainingHours = Math.floor(remainingSeconds / 3600);
+                const remainingMinutes = Math.floor((remainingSeconds % 3600) / 60);
+                const remainingSecs = Math.floor(remainingSeconds % 60);
+                
+                let remainingTimeString = '';
+                if (remainingHours > 0) {
+                    remainingTimeString = `${remainingHours}h ${remainingMinutes}m ${remainingSecs}s`;
+                } else if (remainingMinutes > 0) {
+                    remainingTimeString = `${remainingMinutes}m ${remainingSecs}s`;
+                } else {
+                    remainingTimeString = `${remainingSecs}s`;
+                }
+                
+                document.getElementById('remaining-time').textContent = remainingTimeString;
+            } else {
+                document.getElementById('remaining-time').textContent = 'Calculating...';
+            }
+        } catch (error) {
+            document.getElementById('progress-percentage').textContent = 'N/A';
+            document.getElementById('remaining-time').textContent = 'Error';
+        }
     }
     
     function createTradingViewChart(containerId, data, options = {}) {
@@ -376,8 +433,10 @@
         
         const timesteps = metrics.map(m => m.timesteps);
         
-        // Update training info
-        updateTrainingInfo(metrics);
+        // Update training info (async)
+        updateTrainingInfo(metrics).catch(error => {
+            console.error('Error updating training info:', error);
+        });
         
         // Helper function to create line series data
         function createLineData(values, color) {

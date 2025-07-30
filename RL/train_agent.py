@@ -11,10 +11,12 @@ from RL.trading_env import TradingEnv
 
 
 class TrainingMetricsCallback(BaseCallback):
-    def __init__(self, log_path='plots/training_metrics.json', verbose=0, save_freq=100000):
+    def __init__(self, log_path='plots/training_metrics.json', verbose=0, save_freq=100000, total_timesteps=None, resume_timesteps=0):
         super().__init__(verbose)
         self.log_path = log_path
         self.save_freq = save_freq
+        self.total_timesteps = total_timesteps
+        self.resume_timesteps = resume_timesteps  # Timesteps already completed
         self.metrics = []
         self.recent_rewards = []
         self.recent_lengths = []
@@ -143,8 +145,12 @@ class TrainingMetricsCallback(BaseCallback):
                     # Calculate elapsed training time
                     elapsed_time = time.time() - self.training_start_time
                     
+                    # Calculate progress percentage including resumed timesteps
+                    total_completed_timesteps = self.num_timesteps + self.resume_timesteps
+                    progress_percentage = (total_completed_timesteps / self.total_timesteps * 100) if hasattr(self, 'total_timesteps') else 0
+                    
                     self.metrics.append({
-                        'timesteps': self.num_timesteps,
+                        'timesteps': self.num_timesteps + self.resume_timesteps,  # Include resumed timesteps
                         'reward': reward,
                         'length': length,
                         'mean_reward_100': mean_reward,
@@ -160,7 +166,8 @@ class TrainingMetricsCallback(BaseCallback):
                         'commission': commission,
                         'learning_rate': lr,
                         'entropy': entropy,
-                        'training_time_seconds': elapsed_time
+                        'training_time_seconds': elapsed_time,
+                        'progress_percentage': progress_percentage
                     })
                     self._save_metrics()
 
@@ -208,6 +215,25 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
+    # Check for existing checkpoints to resume training
+    import glob
+    import re
+    
+    # Find the latest checkpoint
+    checkpoint_files = glob.glob(os.path.join(checkpoint_dir, 'ppo_trading_*_steps.zip'))
+    latest_checkpoint = None
+    latest_timesteps = 0
+    
+    if checkpoint_files:
+        for checkpoint_file in checkpoint_files:
+            # Extract timesteps from filename (e.g., ppo_trading_100000_steps.zip -> 100000)
+            match = re.search(r'ppo_trading_(\d+)_steps\.zip', checkpoint_file)
+            if match:
+                timesteps = int(match.group(1))
+                if timesteps > latest_timesteps:
+                    latest_timesteps = timesteps
+                    latest_checkpoint = checkpoint_file
+    
     # Improved PPO configuration to prevent overfitting
     model = PPO(
         "MlpPolicy",
@@ -233,11 +259,22 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         }
     )
     
-    callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1)
+    # Load latest checkpoint if available
+    if latest_checkpoint and os.path.exists(latest_checkpoint):
+        print(f"Found checkpoint: {latest_checkpoint}")
+        print(f"Resuming training from {latest_timesteps:,} timesteps")
+        model = PPO.load(latest_checkpoint, env=env, device=device)
+        remaining_timesteps = total_timesteps - latest_timesteps
+        print(f"Remaining timesteps to train: {remaining_timesteps:,}")
+    else:
+        print("No checkpoint found. Starting training from scratch.")
+        remaining_timesteps = total_timesteps
+    
+    callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1, total_timesteps=total_timesteps, resume_timesteps=latest_timesteps)
     checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir,
                                              name_prefix='ppo_trading')
     start_train = time.time()
-    model.learn(total_timesteps=total_timesteps, callback=[callback, checkpoint_callback])
+    model.learn(total_timesteps=remaining_timesteps, callback=[callback, checkpoint_callback])
     elapsed_train = time.time() - start_train
     model.save(model_path)
     print(f'Model saved to {model_path}')
