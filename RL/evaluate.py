@@ -5,7 +5,7 @@ from stable_baselines3 import PPO
 from RL.trading_env import TradingEnv
 
 
-def evaluate_agent(model_path, test_df, window_size=50, max_episode_steps=10000):
+def evaluate_agent(model_path, test_df, window_size=288, max_episode_steps=25920):
     """Run the trained agent on test data and collect results. Uses MlpPolicy."""
     # Select only the allowed feature columns and 'close' for price
     feature_cols = [

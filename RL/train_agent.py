@@ -183,8 +183,8 @@ class TrainingMetricsCallback(BaseCallback):
         self._save_metrics()
 
 
-def train_agent(train_df, model_path='ppo_trading.zip', window_size=200, total_timesteps=5_000_000, debug=True,
-                max_episode_steps=10000, checkpoint_dir='models/checkpoints', checkpoint_freq=100000):
+def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_timesteps=5_000_000, debug=True,
+                max_episode_steps=25920, checkpoint_dir='models/checkpoints', checkpoint_freq=100000):
     """Train PPO agent on the trading environment and save the model. Uses MlpPolicy.
     Args:
         train_df: DataFrame with training data.

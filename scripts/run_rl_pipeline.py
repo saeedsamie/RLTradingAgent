@@ -4,14 +4,25 @@ from RL.evaluate import evaluate_agent, sharpe_ratio, max_drawdown
 from RL.plotting import plot_equity_curve
 from RL.train_agent import train_agent
 from scripts.data_prep import load_data, check_missing_intervals
+from scripts.config import get_config, print_available_configs
 
+# Configuration - using quarterly market cycles for better pattern recognition
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
-WINDOW_SIZE = 100
-MAX_EPISODE_STEPS = 10000
-TRAIN_RATIO = 0.8
+
+config = get_config('quarterly_focused')
+WINDOW_SIZE = config['window_size']
+MAX_EPISODE_STEPS = config['max_episode_steps']
+TOTAL_TIMESTEPS = config['total_timesteps']
+TRAIN_RATIO = config['train_ratio']
 
 if __name__ == '__main__':
+    print(f"Using configuration: {config['description']}")
+    print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE/288:.1f} days)")
+    print(f"Episode length: {MAX_EPISODE_STEPS} bars ({MAX_EPISODE_STEPS/288:.1f} days)")
+    print(f"Total timesteps: {TOTAL_TIMESTEPS:,} ({TOTAL_TIMESTEPS/1000000:.1f}M)")
+    print()
+    
     # Load data
     df = load_data(DATA_PATH)
     print(f'Dataset loaded: {df.shape[0]} rows')
@@ -30,6 +41,7 @@ if __name__ == '__main__':
         model_path=MODEL_PATH,
         window_size=WINDOW_SIZE,
         max_episode_steps=MAX_EPISODE_STEPS,
+        total_timesteps=TOTAL_TIMESTEPS,
         debug=False
     )
 
