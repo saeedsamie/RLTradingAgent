@@ -65,6 +65,35 @@
             font-size: 13px; 
             color: #0c5460; 
         }
+        .config-info { 
+            text-align: center; 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #f8f9fa; 
+            border-radius: 8px; 
+            border: 1px solid #dee2e6; 
+        }
+        .config-info h3 { 
+            margin: 0 0 15px 0; 
+            font-size: 16px; 
+            color: #495057; 
+        }
+        .config-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+            gap: 10px; 
+            text-align: left; 
+        }
+        .config-item { 
+            padding: 8px 12px; 
+            background: #fff; 
+            border-radius: 4px; 
+            border: 1px solid #e9ecef; 
+            font-size: 13px; 
+        }
+        .config-item strong { 
+            color: #495057; 
+        }
         .refresh-info { text-align: center; color: #666; font-size: 12px; margin-top: 10px; }
         
         .chart-tooltip {
@@ -103,6 +132,30 @@
             <div class="training-estimation">
                 <strong>Progress:</strong> <span id="progress-percentage">-</span> | 
                 <strong>Remaining Time:</strong> <span id="remaining-time">Calculating...</span>
+            </div>
+        </div>
+        
+        <div class="config-info">
+            <h3>Running Configuration</h3>
+            <div class="config-grid">
+                <div class="config-item">
+                    <strong>Description:</strong> <span id="config-description">Loading...</span>
+                </div>
+                <div class="config-item">
+                    <strong>Window Size:</strong> <span id="config-window-size">-</span> bars
+                </div>
+                <div class="config-item">
+                    <strong>Episode Length:</strong> <span id="config-episode-steps">-</span> bars
+                </div>
+                <div class="config-item">
+                    <strong>Total Timesteps:</strong> <span id="config-total-timesteps">-</span>
+                </div>
+                <div class="config-item">
+                    <strong>Window Duration:</strong> <span id="config-window-duration">-</span>
+                </div>
+                <div class="config-item">
+                    <strong>Episode Duration:</strong> <span id="config-episode-duration">-</span>
+                </div>
             </div>
         </div>
         <div class="charts-grid">
@@ -314,6 +367,50 @@
         } catch (error) {
             document.getElementById('progress-percentage').textContent = 'N/A';
             document.getElementById('remaining-time').textContent = 'Error';
+        }
+    }
+    
+    async function updateConfigurationInfo() {
+        try {
+            const config = await fetchTrainingConfig();
+            if (config.error) {
+                document.getElementById('config-description').textContent = 'Error loading config';
+                return;
+            }
+            
+            // Update configuration display
+            document.getElementById('config-description').textContent = config.description || 'N/A';
+            document.getElementById('config-window-size').textContent = config.window_size?.toLocaleString() || 'N/A';
+            document.getElementById('config-episode-steps').textContent = config.max_episode_steps?.toLocaleString() || 'N/A';
+            document.getElementById('config-total-timesteps').textContent = config.total_timesteps?.toLocaleString() || 'N/A';
+            
+            // Calculate human-readable durations (5-minute bars)
+            const windowDuration = config.window_size ? Math.round(config.window_size * 5 / 60) : 0; // hours
+            const episodeDuration = config.max_episode_steps ? Math.round(config.max_episode_steps * 5 / 60) : 0; // hours
+            
+            let windowDurationText = '';
+            if (windowDuration >= 24) {
+                const days = Math.floor(windowDuration / 24);
+                const hours = windowDuration % 24;
+                windowDurationText = `${days}d ${hours}h`;
+            } else {
+                windowDurationText = `${windowDuration}h`;
+            }
+            
+            let episodeDurationText = '';
+            if (episodeDuration >= 24) {
+                const days = Math.floor(episodeDuration / 24);
+                const hours = episodeDuration % 24;
+                episodeDurationText = `${days}d ${hours}h`;
+            } else {
+                episodeDurationText = `${episodeDuration}h`;
+            }
+            
+            document.getElementById('config-window-duration').textContent = windowDurationText;
+            document.getElementById('config-episode-duration').textContent = episodeDurationText;
+            
+        } catch (error) {
+            document.getElementById('config-description').textContent = 'Error loading config';
         }
     }
     
@@ -923,6 +1020,9 @@
             }
             errorMsg.textContent = '';
             plotMetrics(metrics);
+            
+            // Update configuration info
+            await updateConfigurationInfo();
         } catch (e) {
             errorMsg.textContent = 'Failed to fetch training metrics.';
         }

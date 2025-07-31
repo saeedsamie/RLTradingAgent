@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 
 import pandas as pd
 from fastapi import FastAPI, Request
@@ -72,9 +73,9 @@ def get_training_config():
     """
     Returns the current training configuration including total timesteps.
     """
-    try:
-        from scripts.config import get_config
-        config = get_config('quarterly_focused')  # Default config
+    try:    
+        from scripts.run_rl_pipeline import config
+        logging.info(config)
         return {
             "total_timesteps": config['total_timesteps'],
             "description": config['description'],

@@ -77,7 +77,7 @@ if __name__ == '__main__':
     returns = np.array(rewards)
     equity_curve_np = np.array(equity_curve)
     drawdown = (equity_curve_np - np.maximum.accumulate(equity_curve_np)) / np.maximum.accumulate(equity_curve_np)
-    window = 50
+    window = WINDOW_SIZE
 
     # Plot results (all advanced plots)
     plot_equity_curve(
