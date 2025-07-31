@@ -3,14 +3,14 @@ import numpy as np
 from RL.evaluate import evaluate_agent, sharpe_ratio, max_drawdown
 from RL.plotting import plot_equity_curve
 from RL.train_agent import train_agent
+from scripts.config import get_config
 from scripts.data_prep import load_data, check_missing_intervals
-from scripts.config import get_config, print_available_configs
 
 # Configuration - using quarterly market cycles for better pattern recognition
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
 
-config = get_config('quarterly_focused')
+config = get_config('deep_network')
 WINDOW_SIZE = config['window_size']
 MAX_EPISODE_STEPS = config['max_episode_steps']
 TOTAL_TIMESTEPS = config['total_timesteps']
@@ -18,15 +18,16 @@ TRAIN_RATIO = config['train_ratio']
 
 # Add command line argument for fresh start
 import sys
+
 FRESH_START = '--fresh-start' in sys.argv
 
 if __name__ == '__main__':
     print(f"Using configuration: {config['description']}")
-    print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE/288:.1f} days)")
-    print(f"Episode length: {MAX_EPISODE_STEPS} bars ({MAX_EPISODE_STEPS/288:.1f} days)")
-    print(f"Total timesteps: {TOTAL_TIMESTEPS:,} ({TOTAL_TIMESTEPS/1000000:.1f}M)")
+    print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE / 288:.1f} days)")
+    print(f"Episode length: {MAX_EPISODE_STEPS} bars ({MAX_EPISODE_STEPS / 288:.1f} days)")
+    print(f"Total timesteps: {TOTAL_TIMESTEPS:,} ({TOTAL_TIMESTEPS / 1000000:.1f}M)")
     print()
-    
+
     # Load data
     df = load_data(DATA_PATH)
     print(f'Dataset loaded: {df.shape[0]} rows')
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     if FRESH_START:
         import os
         import glob
+
         print("Fresh start requested. Clearing existing checkpoints...")
         checkpoint_files = glob.glob('models/checkpoints/ppo_trading_*_steps.zip')
         for file in checkpoint_files:

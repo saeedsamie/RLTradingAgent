@@ -20,9 +20,11 @@ class TrainingMetricsCallback(BaseCallback):
         self.metrics = []
         self.recent_rewards = []
         self.recent_lengths = []
+        self.recent_trades = []  # Track recent trading activity
         self.saved_metrics_num = 0
         self.window = 100  # For moving averages
         self.training_start_time = time.time()  # Record training start time
+        self.conservative_warnings = 0  # Track conservative behavior warnings
         # Ensure directory exists
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
@@ -84,19 +86,6 @@ class TrainingMetricsCallback(BaseCallback):
         if len(self.locals.get('infos', [])) > 0:
             for info in self.locals['infos']:
                 if 'episode' in info:
-                    episode_data_found = True
-                    if self.verbose > 0:
-                        print(f"Episode data found at timestep {self.num_timesteps}")
-                    reward = info['episode']['r']
-                    length = info['episode']['l']
-                    self.recent_rewards.append(reward)
-                    self.recent_lengths.append(length)
-                    if len(self.recent_rewards) > self.window:
-                        self.recent_rewards.pop(0)
-                    if len(self.recent_lengths) > self.window:
-                        self.recent_lengths.pop(0)
-                    mean_reward = sum(self.recent_rewards) / len(self.recent_rewards)
-                    mean_length = sum(self.recent_lengths) / len(self.recent_lengths)
                     # Try to get loss if available (not always present)
                     loss = info.get('loss', None)
                     # Custom info fields from env
@@ -109,6 +98,25 @@ class TrainingMetricsCallback(BaseCallback):
                     unrealized_pnl = info.get('unrealized_pnl', None)
                     price = info.get('price', None)
                     commission = info.get('commission', None)
+
+                    episode_data_found = True
+                    if self.verbose > 0:
+                        print(f"Episode data found at timestep {self.num_timesteps}")
+                    reward = info['episode']['r']
+                    length = info['episode']['l']
+                    self.recent_rewards.append(reward)
+                    self.recent_lengths.append(length)
+                    self.recent_trades.append(total_trades)
+                    if len(self.recent_rewards) > self.window:
+                        self.recent_rewards.pop(0)
+                    if len(self.recent_lengths) > self.window:
+                        self.recent_lengths.pop(0)
+                    if len(self.recent_trades) > self.window:
+                        self.recent_trades.pop(0)
+                    mean_reward = sum(self.recent_rewards) / len(self.recent_rewards)
+                    mean_length = sum(self.recent_lengths) / len(self.recent_lengths)
+                    mean_trades = sum(self.recent_trades) / len(self.recent_trades) if self.recent_trades else 0
+
                     # Learning rate
                     lr = None
                     if hasattr(self.model, 'lr_schedule'):
@@ -149,12 +157,21 @@ class TrainingMetricsCallback(BaseCallback):
                     total_completed_timesteps = self.num_timesteps + self.resume_timesteps
                     progress_percentage = (total_completed_timesteps / self.total_timesteps * 100) if hasattr(self, 'total_timesteps') else 0
                     
+                    # Check for conservative behavior with more aggressive warnings
+                    if mean_trades < 1.0 and len(self.recent_trades) >= 5:
+                        self.conservative_warnings += 1
+                        if self.conservative_warnings <= 5:  # More warnings
+                            print(f"🚨 CRITICAL: Agent not trading! Average trades: {mean_trades:.1f}")
+                            print(f"   This indicates the reward function needs to be more aggressive")
+                            print(f"   Consider restarting with even stronger trading incentives")
+                    
                     self.metrics.append({
                         'timesteps': self.num_timesteps + self.resume_timesteps,  # Include resumed timesteps
                         'reward': reward,
                         'length': length,
                         'mean_reward_100': mean_reward,
                         'mean_length_100': mean_length,
+                        'mean_trades_100': mean_trades,  # Add mean trades tracking
                         'loss': final_loss,
                         'balance': balance,
                         'equity': equity,
@@ -244,28 +261,28 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
                     latest_timesteps = timesteps
                     latest_checkpoint = checkpoint_file
     
-    # Improved PPO configuration to prevent overfitting
+    # ULTRA AGGRESSIVE PPO configuration to force trading
     print(f"Creating PPO model with device: {device}")
     model = PPO(
         "MlpPolicy",
         env,
         verbose=1,
         device=device,
-        learning_rate=3e-4,  # Slightly higher learning rate for better exploration
-        clip_range=0.1,  # Reduced clip range for more stable training
-        ent_coef=0.01,  # Increased entropy coefficient for exploration
-        vf_coef=0.5,  # Reduced value function coefficient to prevent overfitting
-        max_grad_norm=0.5,  # Gradient clipping to prevent exploding gradients
-        n_steps=2048,  # Larger batch size for more stable updates
-        batch_size=64,  # Smaller batch size within each update
-        n_epochs=10,  # More epochs per update for better learning
-        gamma=0.99,  # Standard discount factor
-        gae_lambda=0.95,  # GAE lambda for advantage estimation
-        target_kl=0.01,  # Early stopping if KL divergence is too high
+        learning_rate=1e-3,  # Balanced learning rate for deep network
+        clip_range=0.2,  # Stable clip range for deep network
+        ent_coef=0.3,  # Balanced entropy coefficient for exploration
+        vf_coef=0.5,  # Higher value function coefficient for deep network
+        max_grad_norm=0.5,  # Lower gradient clipping for stable deep learning
+        n_steps=2048,  # Larger batch for deep network stability
+        batch_size=64,  # Larger batch size for deep network
+        n_epochs=4,  # More epochs for deep network learning
+        gamma=0.99,  # Higher discount factor for deep network
+        gae_lambda=0.95,  # Higher GAE lambda for deep network
+        target_kl=0.01,  # Lower KL divergence target for stable deep learning
         tensorboard_log="./logs/",  # Enable tensorboard logging
         policy_kwargs={
-            "net_arch": dict(pi=[256, 256], vf=[256, 256]),  # Fixed: Use dict instead of list
-            "activation_fn": torch.nn.ReLU,
+            "net_arch": dict(pi=[512, 512, 256, 256, 128], vf=[512, 512, 256, 256, 128]),  # Deep network for complex patterns
+            "activation_fn": torch.nn.Tanh,  # Tanh for better gradient flow
             "ortho_init": True,  # Orthogonal initialization for better training
         }
     )

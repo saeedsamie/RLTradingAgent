@@ -113,12 +113,6 @@
                 </div>
             </div>
             <div class="chart-container">
-                <h3>Episode Lengths</h3>
-                <div class="chart-wrapper">
-                    <div id="lengths-chart"></div>
-                </div>
-            </div>
-            <div class="chart-container">
                 <h3>Loss</h3>
                 <div class="chart-wrapper">
                     <div id="loss-chart"></div>
@@ -137,12 +131,6 @@
                 </div>
             </div>
             <div class="chart-container">
-                <h3>Position</h3>
-                <div class="chart-wrapper">
-                    <div id="position-chart"></div>
-                </div>
-            </div>
-            <div class="chart-container">
                 <h3>Total Trades</h3>
                 <div class="chart-wrapper">
                     <div id="trades-chart"></div>
@@ -152,13 +140,6 @@
                 <h3>PnL</h3>
                 <div class="chart-wrapper">
                     <div id="pnl-chart"></div>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <h3>Learning Rate</h3>
-                <div class="chart-wrapper">
-                    <div id="learning-rate-chart"></div>
                 </div>
             </div>
             <div class="chart-container">
@@ -187,14 +168,11 @@
     
     <!-- Tooltips for each chart -->
     <div id="rewards-tooltip" class="chart-tooltip"></div>
-    <div id="lengths-tooltip" class="chart-tooltip"></div>
     <div id="loss-tooltip" class="chart-tooltip"></div>
     <div id="balance-tooltip" class="chart-tooltip"></div>
     <div id="equity-tooltip" class="chart-tooltip"></div>
-    <div id="position-tooltip" class="chart-tooltip"></div>
     <div id="trades-tooltip" class="chart-tooltip"></div>
     <div id="pnl-tooltip" class="chart-tooltip"></div>
-    <div id="learning-rate-tooltip" class="chart-tooltip"></div>
     <div id="entropy-tooltip" class="chart-tooltip"></div>
     
     <script>
@@ -204,12 +182,6 @@
         const rewardsTooltip = document.getElementById('rewards-tooltip');
         if (rewardsChart && rewardsTooltip) {
             rewardsChart.appendChild(rewardsTooltip);
-        }
-        
-        const lengthsChart = document.getElementById('lengths-chart');
-        const lengthsTooltip = document.getElementById('lengths-tooltip');
-        if (lengthsChart && lengthsTooltip) {
-            lengthsChart.appendChild(lengthsTooltip);
         }
         
         const lossChart = document.getElementById('loss-chart');
@@ -230,12 +202,6 @@
             equityChart.appendChild(equityTooltip);
         }
         
-        const positionChart = document.getElementById('position-chart');
-        const positionTooltip = document.getElementById('position-tooltip');
-        if (positionChart && positionTooltip) {
-            positionChart.appendChild(positionTooltip);
-        }
-        
         const tradesChart = document.getElementById('trades-chart');
         const tradesTooltip = document.getElementById('trades-tooltip');
         if (tradesChart && tradesTooltip) {
@@ -246,12 +212,6 @@
         const pnlTooltip = document.getElementById('pnl-tooltip');
         if (pnlChart && pnlTooltip) {
             pnlChart.appendChild(pnlTooltip);
-        }
-        
-        const learningChart = document.getElementById('learning-rate-chart');
-        const learningTooltip = document.getElementById('learning-rate-tooltip');
-        if (learningChart && learningTooltip) {
-            learningChart.appendChild(learningTooltip);
         }
         
         const entropyChart = document.getElementById('entropy-chart');
@@ -445,7 +405,7 @@
             const data = values.map((value, index) => ({
                 time: baseTime + (index * 60), // Each point is 1 minute apart
                 value: value !== null && value !== undefined ? value : 0
-            })).filter((point, index) => point.value !== 0 || index === 0);
+            }));
             return data;
         }
         
@@ -525,81 +485,7 @@
                 }
             });
             
-            // Lengths Chart
-        
-        // Lengths Chart
-            const lengthsChart = createTradingViewChart('lengths-chart', null, {});
-            const lengthsSeries = lengthsChart.addLineSeries({ color: '#FF8C00', lineWidth: 2 });
-            const meanLengthsSeries = lengthsChart.addLineSeries({ color: '#800080', lineWidth: 2, lineStyle: 1 });
-            lengthsSeries.setData(createLineData(safeMap(metrics, 'length')));
-            meanLengthsSeries.setData(createLineData(safeMap(metrics, 'mean_length_100')));
-            
-            // Tooltip for Lengths Chart
-            const lengthsTooltip = document.getElementById('lengths-tooltip');
-            
-            lengthsChart.subscribeCrosshairMove(param => {
-                
-                if (
-                    param.point === undefined ||
-                    !param.time ||
-                    param.point.x < 0 ||
-                    param.point.x > lengthsChart.chartElement().clientWidth ||
-                    param.point.y < 0 ||
-                    param.point.y > lengthsChart.chartElement().clientHeight
-                ) {
-                    lengthsTooltip.style.display = 'none';
-                } else {
-                    const lengthData = param.seriesData.get(lengthsSeries);
-                    const meanLengthData = param.seriesData.get(meanLengthsSeries);
-                    
-                    if (lengthData || meanLengthData) {
-                        // Convert timestamp back to timestep for display
-                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
-                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
-                        
-                        lengthsTooltip.style.display = 'block';
-                        lengthsTooltip.innerHTML = `
-                            <div style="color: #FF8C00; font-weight: bold;">Episode Lengths</div>
-                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
-                                ${lengthData ? lengthData.value.toFixed(0) : 'N/A'}
-                            </div>
-                            <div style="color: #800080; font-size: 12px;">
-                                Mean: ${meanLengthData ? meanLengthData.value.toFixed(0) : 'N/A'}
-                            </div>
-                            <div style="color: black; font-size: 10px;">
-                                Timestep: ${timestep.toLocaleString()}
-                            </div>`;
-                        
-                        const coordinate = lengthsSeries.priceToCoordinate(lengthData ? lengthData.value : 0);
-                        let shiftedCoordinate = param.point.x - 60;
-                        
-                        if (coordinate === null) {
-                            return;
-                        }
-                        
-                        shiftedCoordinate = Math.max(
-                            0,
-                            Math.min(lengthsChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
-                        );
-                        
-                        const coordinateY =
-                            coordinate - toolTipHeight - toolTipMargin > 0
-                                ? coordinate - toolTipHeight - toolTipMargin
-                                : Math.max(
-                                    0,
-                                    Math.min(
-                                        lengthsChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
-                                        coordinate + toolTipMargin
-                                    )
-                                );
-                        
-                        lengthsTooltip.style.left = shiftedCoordinate + 'px';
-                        lengthsTooltip.style.top = coordinateY + 'px';
-                    } else {
-                        lengthsTooltip.style.display = 'none';
-                    }
-                }
-            });
+
         
         // Loss Chart
             const lossChart = createTradingViewChart('loss-chart', null, {});
@@ -802,79 +688,7 @@
                 }
             });
             
-            // Position Chart (Bar Chart for TradingView)
-            const positionChart = createTradingViewChart('position-chart', null, {});
-            const positionSeries = positionChart.addHistogramSeries({ color: '#FF00FF' });
-            // Convert timesteps to timestamps for position data
-            const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
-            const positionData = safeMap(metrics, 'position').map((value, index) => ({
-                time: baseTime + (index * 60),
-                value: value !== null && value !== undefined ? value : 0
-            }));
-            positionSeries.setData(positionData);
-            
-            // Tooltip for Position Chart
-            const positionTooltip = document.getElementById('position-tooltip');
-            
-            positionChart.subscribeCrosshairMove(param => {
-                
-                if (
-                    param.point === undefined ||
-                    !param.time ||
-                    param.point.x < 0 ||
-                    param.point.x > positionChart.chartElement().clientWidth ||
-                    param.point.y < 0 ||
-                    param.point.y > positionChart.chartElement().clientHeight
-                ) {
-                    positionTooltip.style.display = 'none';
-                } else {
-                    const data = param.seriesData.get(positionSeries);
-                    if (data && data.value !== undefined) {
-                        // Convert timestamp back to timestep for display
-                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
-                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
-                        const positionText = data.value === 1 ? 'Long' : data.value === -1 ? 'Short' : 'Flat';
-                        
-                        positionTooltip.style.display = 'block';
-                        positionTooltip.innerHTML = `
-                            <div style="color: #FF00FF; font-weight: bold;">Position</div>
-                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
-                                ${positionText}
-                            </div>
-                            <div style="color: black; font-size: 10px;">
-                                Value: ${data.value} | Timestep: ${timestep.toLocaleString()}
-                            </div>`;
-                        
-                        const coordinate = positionSeries.priceToCoordinate(data.value);
-                        let shiftedCoordinate = param.point.x - 60;
-                        
-                        if (coordinate === null) {
-                            return;
-                        }
-                        
-                        shiftedCoordinate = Math.max(
-                            0,
-                            Math.min(positionChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
-                        );
-                        
-                        const coordinateY =
-                            coordinate - toolTipHeight - toolTipMargin > 0
-                                ? coordinate - toolTipHeight - toolTipMargin
-                                : Math.max(
-                                    0,
-                                    Math.min(
-                                        positionChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
-                                        coordinate + toolTipMargin
-                                    )
-                                );
-                        
-                        positionTooltip.style.left = shiftedCoordinate + 'px';
-                        positionTooltip.style.top = coordinateY + 'px';
-                    } else {
-                        positionTooltip.style.display = 'none';
-                    }
-                }
-            });
+
             
             // Total Trades Chart
             const tradesChart = createTradingViewChart('trades-chart', null, {});
@@ -1017,80 +831,7 @@
                 }
             });
             
-            // Learning Rate Chart
-            const learningChart = createTradingViewChart('learning-rate-chart', null, {});
-            const learningSeries = learningChart.addLineSeries({ 
-                color: '#008080', 
-                lineWidth: 2,
-                priceFormat: {
-                    type: 'price',
-                    precision: 5,
-                    minMove: 0.00001
-                }
-            });
-            learningSeries.setData(createLineData(safeMap(metrics, 'learning_rate')));
-            
-            // Tooltip for Learning Rate Chart
-            const learningTooltip = document.getElementById('learning-rate-tooltip');
-            
-            learningChart.subscribeCrosshairMove(param => {
-                
-                if (
-                    param.point === undefined ||
-                    !param.time ||
-                    param.point.x < 0 ||
-                    param.point.x > learningChart.chartElement().clientWidth ||
-                    param.point.y < 0 ||
-                    param.point.y > learningChart.chartElement().clientHeight
-                ) {
-                    learningTooltip.style.display = 'none';
-                } else {
-                    const data = param.seriesData.get(learningSeries);
-                    if (data && data.value !== undefined) {
-                        // Convert timestamp back to timestep for display
-                        const baseTime = Math.floor(Date.now() / 1000) - (timesteps.length * 60);
-                        const timestep = Math.round((param.time - baseTime) / 60) + 1;
-                        
-                        learningTooltip.style.display = 'block';
-                        learningTooltip.innerHTML = `
-                            <div style="color: #008080; font-weight: bold;">Learning Rate</div>
-                            <div style="font-size: 18px; margin: 4px 0px; color: black;">
-                                ${data.value.toFixed(5)}
-                            </div>
-                            <div style="color: black; font-size: 10px;">
-                                Timestep: ${timestep.toLocaleString()}
-                            </div>`;
-                        
-                        const coordinate = learningSeries.priceToCoordinate(data.value);
-                        let shiftedCoordinate = param.point.x - 60;
-                        
-                        if (coordinate === null) {
-                            return;
-                        }
-                        
-                        shiftedCoordinate = Math.max(
-                            0,
-                            Math.min(learningChart.chartElement().clientWidth - toolTipWidth, shiftedCoordinate)
-                        );
-                        
-                        const coordinateY =
-                            coordinate - toolTipHeight - toolTipMargin > 0
-                                ? coordinate - toolTipHeight - toolTipMargin
-                                : Math.max(
-                                    0,
-                                    Math.min(
-                                        learningChart.chartElement().clientHeight - toolTipHeight - toolTipMargin,
-                                        coordinate + toolTipMargin
-                                    )
-                                );
-                        
-                        learningTooltip.style.left = shiftedCoordinate + 'px';
-                        learningTooltip.style.top = coordinateY + 'px';
-                    } else {
-                        learningTooltip.style.display = 'none';
-                    }
-                }
-            });
+
             
             // Entropy Chart
             const entropyChart = createTradingViewChart('entropy-chart', null, {});

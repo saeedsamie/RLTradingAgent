@@ -59,6 +59,34 @@ TRAINING_CONFIGS = {
         'total_timesteps': 17_600_000,  # 20 epochs of quarterly episodes
         'train_ratio': 0.8,
         'description': 'Daily window, quarterly episodes - optimal for market cycle learning'
+    },
+    'active_trading': {
+        'window_size': MARKET_CYCLES['daily'],
+        'max_episode_steps': MARKET_CYCLES['weekly'],  # Shorter episodes for more frequent learning
+        'total_timesteps': 5_000_000,  # Faster training
+        'train_ratio': 0.8,
+        'description': 'Daily window, weekly episodes - optimized for active trading with enhanced exploration'
+    },
+    'improved_trading': {
+        'window_size': MARKET_CYCLES['daily'],
+        'max_episode_steps': MARKET_CYCLES['weekly'],
+        'total_timesteps': 5_000_000,
+        'train_ratio': 0.8,
+        'description': 'Improved configuration with better reward function and hyperparameters to encourage trading'
+    },
+    'ultra_aggressive': {
+        'window_size': MARKET_CYCLES['daily'],
+        'max_episode_steps': MARKET_CYCLES['weekly'],
+        'total_timesteps': 3_000_000,  # Shorter training for faster iteration
+        'train_ratio': 0.8,
+        'description': 'Ultra aggressive configuration to force trading activity'
+    },
+    'deep_network': {
+        'window_size': MARKET_CYCLES['daily'],
+        'max_episode_steps': MARKET_CYCLES['weekly'],
+        'total_timesteps': 5_000_000,  # Longer training for deep network
+        'train_ratio': 0.8,
+        'description': 'Deep network configuration for complex pattern learning'
     }
 }
 

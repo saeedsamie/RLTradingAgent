@@ -63,6 +63,7 @@ class TradingEnv(gym.Env):
         self.total_trades = 0
         self.total_commission = 0
         self.total_pnl = 0
+        self.trading_activity = 0  # Initialize trading activity counter
 
         if self.debug:
             logger.info(f"Environment reset - Step: {self.current_step}, Balance: ${self.balance}")
@@ -136,24 +137,27 @@ class TradingEnv(gym.Env):
         old_balance = self.balance
         old_position = self.position
 
-        # Trading logic
+        # Trading logic with immediate rewards
         if action == 1:  # Long
             if self.position == 0:
                 self.entry_price = price
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
+                reward = 0.1  # Immediate reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
             elif self.position == -1:
                 pnl = (self.entry_price - price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission
-                self.balance += reward
+                reward = pnl - commission + 0.2  # Bonus for closing position
+                self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -162,6 +166,8 @@ class TradingEnv(gym.Env):
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
+                reward += 0.1  # Additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -172,17 +178,20 @@ class TradingEnv(gym.Env):
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
+                reward = 0.1  # Immediate reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
             elif self.position == 1:
                 pnl = (price - self.entry_price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission
-                self.balance += reward
+                reward = pnl - commission + 0.2  # Bonus for closing position
+                self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -191,6 +200,8 @@ class TradingEnv(gym.Env):
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
+                reward += 0.1  # Additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -198,26 +209,31 @@ class TradingEnv(gym.Env):
         elif action == 0:  # Out
             if self.position == 1:
                 pnl = (price - self.entry_price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission
-                self.balance += reward
+                reward = pnl - commission + 0.1  # Small bonus for closing position
+                self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
             elif self.position == -1:
                 pnl = (self.entry_price - price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission
-                self.balance += reward
+                reward = pnl - commission + 0.1  # Small bonus for closing position
+                self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+            else:
+                # No position and choosing to stay out - small penalty
+                reward = -0.05
 
         # Update equity
         if self.position != 0:
@@ -253,28 +269,53 @@ class TradingEnv(gym.Env):
             else:
                 risk_adjusted_reward = reward
             
-            # Add drawdown penalty
+            # Add drawdown penalty (reduced to be less conservative)
             if len(self.equity_curve) > 1:
                 peak_equity = max(self.equity_curve)
                 current_drawdown = (peak_equity - self.equity) / peak_equity if peak_equity > 0 else 0
-                drawdown_penalty = -current_drawdown * 0.1  # Penalize drawdowns
+                drawdown_penalty = -current_drawdown * 0.05  # Reduced penalty for less conservative behavior
             else:
                 drawdown_penalty = 0
             
-            # Add diversity penalty to encourage exploration
+            # Maximum diversity bonus to encourage aggressive trading
             if hasattr(self, 'action_history'):
                 if len(self.action_history) > 10:
                     recent_actions = self.action_history[-10:]
                     action_diversity = len(set(recent_actions)) / 3.0  # 3 possible actions
-                    diversity_bonus = (action_diversity - 0.5) * 0.01  # Encourage diverse actions
+                    # Maximum diversity bonus to encourage trading
+                    diversity_bonus = (action_diversity - 0.2) * 0.2  # Maximum encouragement for diverse actions
                 else:
                     diversity_bonus = 0
             else:
                 diversity_bonus = 0
                 self.action_history = []
             
-            # Combine all reward components
-            final_reward = risk_adjusted_reward + drawdown_penalty + diversity_bonus
+            # MUCH MORE AGGRESSIVE trading activity incentives
+            if hasattr(self, 'trading_activity'):
+                if self.trading_activity > 0:
+                    # Much stronger bonus for trading activity
+                    trading_bonus = min(self.trading_activity * 0.5, 5.0)  # 5x stronger bonus
+                else:
+                    # Much stronger penalty for no trading
+                    trading_bonus = -2.0  # 4x stronger penalty for no trading
+            else:
+                trading_bonus = 0
+                self.trading_activity = 0
+            
+            # Add MUCH STRONGER profit-taking bonus
+            if reward > 0:
+                profit_bonus = reward * 0.5  # 50% bonus on profits (5x stronger)
+            else:
+                profit_bonus = 0
+            
+            # Add MUCH STRONGER position-holding bonus
+            if self.position != 0:
+                position_bonus = 0.1  # 10x stronger bonus for holding positions
+            else:
+                position_bonus = 0
+            
+            # Combine all reward components with maximum trading incentives
+            final_reward = risk_adjusted_reward + drawdown_penalty + diversity_bonus + trading_bonus + profit_bonus + position_bonus
             
             # Store action for diversity tracking
             self.action_history.append(action)
