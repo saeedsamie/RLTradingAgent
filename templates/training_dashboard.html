@@ -66,33 +66,38 @@
             color: #0c5460; 
         }
         .config-info { 
-            text-align: center; 
             margin: 15px 0; 
             padding: 15px; 
             background: #f8f9fa; 
             border-radius: 8px; 
-            border: 1px solid #dee2e6; 
+            border: 1px solid #e9ecef; 
         }
         .config-info h3 { 
-            margin: 0 0 15px 0; 
-            font-size: 16px; 
+            margin: 0 0 12px 0; 
+            font-size: 14px; 
             color: #495057; 
+            font-weight: 600;
         }
-        .config-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
-            gap: 10px; 
-            text-align: left; 
+        .config-simple { 
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
-        .config-item { 
-            padding: 8px 12px; 
-            background: #fff; 
-            border-radius: 4px; 
-            border: 1px solid #e9ecef; 
-            font-size: 13px; 
+        .config-line { 
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            line-height: 1.4;
         }
-        .config-item strong { 
-            color: #495057; 
+        .config-key { 
+            color: #6c757d; 
+            font-weight: 500;
+            min-width: 80px;
+            margin-right: 8px;
+        }
+        .config-val { 
+            color: #212529; 
+            font-weight: 400;
         }
         .refresh-info { text-align: center; color: #666; font-size: 12px; margin-top: 10px; }
         
@@ -136,25 +141,23 @@
         </div>
         
         <div class="config-info">
-            <h3>Running Configuration</h3>
-            <div class="config-grid">
-                <div class="config-item">
-                    <strong>Description:</strong> <span id="config-description">Loading...</span>
+            <h3>Configuration</h3>
+            <div class="config-simple">
+                <div class="config-line">
+                    <span class="config-key">Type:</span>
+                    <span class="config-val" id="config-description">Loading...</span>
                 </div>
-                <div class="config-item">
-                    <strong>Window Size:</strong> <span id="config-window-size">-</span> bars
+                <div class="config-line">
+                    <span class="config-key">Window:</span>
+                    <span class="config-val"><span id="config-window-size">-</span> bars (<span id="config-window-duration">-</span>)</span>
                 </div>
-                <div class="config-item">
-                    <strong>Episode Length:</strong> <span id="config-episode-steps">-</span> bars
+                <div class="config-line">
+                    <span class="config-key">Episode:</span>
+                    <span class="config-val"><span id="config-episode-steps">-</span> bars (<span id="config-episode-duration">-</span>)</span>
                 </div>
-                <div class="config-item">
-                    <strong>Total Timesteps:</strong> <span id="config-total-timesteps">-</span>
-                </div>
-                <div class="config-item">
-                    <strong>Window Duration:</strong> <span id="config-window-duration">-</span>
-                </div>
-                <div class="config-item">
-                    <strong>Episode Duration:</strong> <span id="config-episode-duration">-</span>
+                <div class="config-line">
+                    <span class="config-key">Timesteps:</span>
+                    <span class="config-val" id="config-total-timesteps">-</span>
                 </div>
             </div>
         </div>
