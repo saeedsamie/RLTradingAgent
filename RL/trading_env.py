@@ -23,7 +23,7 @@ class TradingEnv(gym.Env):
     """
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, df, window_size=288, commission_per_lot=0.5, lot_size=0.01, debug=False,
+    def __init__(self, df, window_size=288, commission_per_lot=50, lot_size=0.01, debug=False,
                  max_episode_steps=25920):
         super().__init__()
         self.df = df.reset_index(drop=True)
