@@ -231,12 +231,9 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     
     # Ensure datetime index is preserved - check both index and first column
     # Assume the first column is 'datetime' and set it as the index
-    
-    print(train_df)
-    print(train_df.columns)
+
     filtered_df = train_df[['close'] + feature_cols].copy()
     filtered_df.index = pd.to_datetime(train_df['datetime'])
-    # filtered_df = filtered_df.drop(columns=['datetime'])
     
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
     print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")

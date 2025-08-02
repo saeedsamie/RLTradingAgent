@@ -50,6 +50,11 @@ class TradingEnv(gym.Env):
         self.lot_size = lot_size
         self.commission_per_lot = commission_per_lot
         self.initial_balance = 1000.0
+        
+        # Add sliding window support for multiple episodes
+        self.episode_start_idx = 0
+        self.episode_end_idx = min(window_size + max_episode_steps, len(self.df))
+        
         self.reset()
 
         if self.debug:
@@ -59,6 +64,7 @@ class TradingEnv(gym.Env):
             logger.info(f"Observation space: {self.observation_space}")
             logger.info(f"Initial balance: ${self.initial_balance}")
             logger.info(f"Datetime range: {self.datetime_index[0]} to {self.datetime_index[-1]}")
+            logger.info(f"Episode range: {self.episode_start_idx} to {self.episode_end_idx}")
 
     def get_datetime_at_index(self, index):
         """
@@ -76,7 +82,21 @@ class TradingEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         start_time = time.time()
-        self.current_step = self.window_size
+        
+        # Implement sliding window for multiple episodes
+        # Move the episode window forward by max_episode_steps, but ensure we have enough data
+        if self.episode_end_idx >= len(self.df) - self.max_episode_steps:
+            # If we're near the end, start over from the beginning
+            self.episode_start_idx = 0
+            self.episode_end_idx = min(self.window_size + self.max_episode_steps, len(self.df))
+        else:
+            # Move the window forward
+            self.episode_start_idx = self.episode_end_idx - self.max_episode_steps
+            self.episode_end_idx = min(self.episode_start_idx + self.window_size + self.max_episode_steps, len(self.df))
+        
+        # Set current step to the start of the episode window
+        self.current_step = self.episode_start_idx + self.window_size
+        
         self.position = 0  # 0: Out, 1: Long, -1: Short
         self.entry_price = 0
         self.balance = self.initial_balance
@@ -85,12 +105,11 @@ class TradingEnv(gym.Env):
         self.total_trades = 0
         self.total_commission = 0
         self.total_pnl = 0
-        self.trading_activity = 0  # Initialize trading activity counter
         self.entry_step = None  # Initialize entry step tracking
         self.entry_datetime = None  # Initialize entry datetime tracking
 
         if self.debug:
-            logger.info(f"Environment reset - Step: {self.current_step}, Balance: ${self.balance}")
+            logger.info(f"Environment reset - Episode: {self.episode_start_idx} to {self.episode_end_idx}, Step: {self.current_step}, Balance: ${self.balance}")
 
         result = self._get_obs(), {}
         elapsed = time.time() - start_time
@@ -101,14 +120,15 @@ class TradingEnv(gym.Env):
 
     def _get_obs(self):
         # CRITICAL FIX: Use data up to previous step to prevent look-ahead bias
-        start_idx = max(0, self.current_step - self.window_size)
-        end_idx = self.current_step - 1  # Use data up to previous step only
+        # Use sliding window approach - ensure we stay within episode bounds
+        start_idx = max(self.episode_start_idx, self.current_step - self.window_size)
+        end_idx = min(self.current_step - 1, self.episode_end_idx)  # Use data up to previous step only
 
         # Ensure we have enough data
         if end_idx > len(self.df):
             raise ValueError(f"Current step {self.current_step} exceeds dataframe length {len(self.df)}")
 
-        # If we don't have enough historical data, pad with the earliest available data
+        # If we don't have enough historical data, pad with the earliest available data in episode
         if end_idx < start_idx:
             end_idx = start_idx
         
@@ -154,9 +174,10 @@ class TradingEnv(gym.Env):
             logger.warning(f"Error processing action {action} of type {type(action)}: {e}")
             action = 0  # Default to 'Out' action
 
-        # Check episode termination conditions
-        done = (self.current_step >= len(self.df) - 1) or (
-                self.current_step >= self.window_size + self.max_episode_steps)
+        # Check episode termination conditions - use sliding window approach
+        # Episode ends when we reach the end of the current episode window
+        done = (self.current_step >= self.episode_end_idx - 1) or (
+                self.current_step >= self.episode_start_idx + self.window_size + self.max_episode_steps)
 
         reward = 0
         price = self.df.iloc[self.current_step]['close']
@@ -172,8 +193,7 @@ class TradingEnv(gym.Env):
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
-                reward = 0.01  # Small reward for taking action
+                reward = 0.0  # No reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -185,7 +205,6 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -194,8 +213,7 @@ class TradingEnv(gym.Env):
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
-                reward += 0.01  # Small additional reward for new position
+                # No additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -206,8 +224,7 @@ class TradingEnv(gym.Env):
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
-                reward = 0.01  # Small reward for taking action
+                reward = 0.0  # No reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -219,7 +236,6 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -228,8 +244,7 @@ class TradingEnv(gym.Env):
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
-                reward += 0.01  # Small additional reward for new position
+                # No additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -243,7 +258,6 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -255,7 +269,6 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                self.trading_activity += 1  # Track trading activity
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
@@ -354,7 +367,7 @@ class TradingEnv(gym.Env):
             import uuid
             if hasattr(self, 'trade_history') and len(self.trade_history) > 0:
                 unique_id = uuid.uuid4().hex
-                filename = f"trade_history_{self.current_step}_{unique_id}.csv"
+                filename = f"trade_history.csv"
                 output_dir = "trade_history"
                 os.makedirs(output_dir, exist_ok=True)
                 filepath = os.path.join(output_dir, filename)
