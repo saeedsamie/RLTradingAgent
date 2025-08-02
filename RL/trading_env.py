@@ -1,8 +1,10 @@
 import logging
 import time
+from datetime import datetime
 
 import gymnasium as gym
 import numpy as np
+import pandas as pd
 import torch
 from gymnasium import spaces
 
@@ -26,13 +28,18 @@ class TradingEnv(gym.Env):
     def __init__(self, df, window_size=288, commission_per_lot=50, lot_size=0.01, debug=False,
                  max_episode_steps=25920):
         super().__init__()
+        # Preserve datetime information if available
+        
+        # DataFrame already has datetime index
+        self.datetime_index = df.index.copy()
         self.df = df.reset_index(drop=True)
+        
         self.window_size = window_size
         self.current_step = window_size
         self.debug = debug
         self.max_episode_steps = max_episode_steps
         # First column is 'close', rest are features
-        self.feature_cols = df.columns[1:]
+        self.feature_cols = self.df.columns[1:]
         self.num_features = len(self.feature_cols)
         # Action: 0=Out, 1=Long, 2=Short
         self.action_space = spaces.Discrete(3)
@@ -51,6 +58,21 @@ class TradingEnv(gym.Env):
             logger.info(f"Action space: {self.action_space}")
             logger.info(f"Observation space: {self.observation_space}")
             logger.info(f"Initial balance: ${self.initial_balance}")
+            logger.info(f"Datetime range: {self.datetime_index[0]} to {self.datetime_index[-1]}")
+
+    def get_datetime_at_index(self, index):
+        """
+        Get datetime for a specific index in the dataset.
+        
+        Args:
+            index (int): The index to get datetime for
+            
+        Returns:
+            datetime or None: The datetime at the given index, or None if index is out of bounds
+        """
+        if index is None or index < 0 or index >= len(self.datetime_index):
+            return None
+        return self.datetime_index[index]
 
     def reset(self, seed=None, options=None):
         start_time = time.time()
@@ -64,6 +86,8 @@ class TradingEnv(gym.Env):
         self.total_commission = 0
         self.total_pnl = 0
         self.trading_activity = 0  # Initialize trading activity counter
+        self.entry_step = None  # Initialize entry step tracking
+        self.entry_datetime = None  # Initialize entry datetime tracking
 
         if self.debug:
             logger.info(f"Environment reset - Step: {self.current_step}, Balance: ${self.balance}")
@@ -76,31 +100,35 @@ class TradingEnv(gym.Env):
         return result
 
     def _get_obs(self):
-        # Only use feature columns (not 'close') for observation
+        # CRITICAL FIX: Use data up to previous step to prevent look-ahead bias
         start_idx = max(0, self.current_step - self.window_size)
-        end_idx = self.current_step
-        
+        end_idx = self.current_step - 1  # Use data up to previous step only
+
         # Ensure we have enough data
         if end_idx > len(self.df):
             raise ValueError(f"Current step {self.current_step} exceeds dataframe length {len(self.df)}")
+
+        # If we don't have enough historical data, pad with the earliest available data
+        if end_idx < start_idx:
+            end_idx = start_idx
         
         obs = self.df.iloc[start_idx:end_idx, 1:].values.astype(np.float32)
-        
+
         # If we don't have enough data for the full window, pad with zeros
         if obs.shape[0] < self.window_size:
             padding_rows = self.window_size - obs.shape[0]
             padding = np.zeros((padding_rows, obs.shape[1]), dtype=np.float32)
             obs = np.vstack([padding, obs])
-        
+
         # Add account state features to each row in the window
         balance_arr = np.full((self.window_size, 1), self.balance, dtype=np.float32)
         position_arr = np.full((self.window_size, 1), self.position, dtype=np.float32)
         obs = np.concatenate([obs, balance_arr, position_arr], axis=1)
-        
+
         # Ensure obs is a numpy array before checking for NaN/inf
         if isinstance(obs, np.ndarray) and (np.isnan(obs).any() or np.isinf(obs).any()):
             logger.warning(f"Observation contains NaN or inf at step {self.current_step}")
-        
+
         return obs
 
     def step(self, action):
@@ -137,7 +165,7 @@ class TradingEnv(gym.Env):
         old_balance = self.balance
         old_position = self.position
 
-        # Trading logic with immediate rewards
+        # Trading logic with realistic rewards
         if action == 1:  # Long
             if self.position == 0:
                 self.entry_price = price
@@ -145,13 +173,13 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 self.trading_activity += 1  # Track trading activity
-                reward = 0.1  # Immediate reward for taking action
+                reward = 0.01  # Small reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
             elif self.position == -1:
-                pnl = (self.entry_price - price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission + 0.2  # Bonus for closing position
+                pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
+                reward = pnl - commission  # No artificial bonus
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
@@ -167,7 +195,7 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 self.trading_activity += 1  # Track trading activity
-                reward += 0.1  # Additional reward for new position
+                reward += 0.01  # Small additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
@@ -179,13 +207,13 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 self.trading_activity += 1  # Track trading activity
-                reward = 0.1  # Immediate reward for taking action
+                reward = 0.01  # Small reward for taking action
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
             elif self.position == 1:
-                pnl = (price - self.entry_price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission + 0.2  # Bonus for closing position
+                pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
+                reward = pnl - commission  # No artificial bonus
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
@@ -201,15 +229,15 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 self.trading_activity += 1  # Track trading activity
-                reward += 0.1  # Additional reward for new position
+                reward += 0.01  # Small additional reward for new position
                 if self.debug:
                     logger.info(
                         f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
 
         elif action == 0:  # Out
             if self.position == 1:
-                pnl = (price - self.entry_price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission + 0.1  # Small bonus for closing position
+                pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
+                reward = pnl - commission  # No artificial bonus
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
@@ -220,8 +248,8 @@ class TradingEnv(gym.Env):
                     logger.info(
                         f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
             elif self.position == -1:
-                pnl = (self.entry_price - price) * self.lot_size * 10000  # pip value
-                reward = pnl - commission + 0.1  # Small bonus for closing position
+                pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
+                reward = pnl - commission  # No artificial bonus
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
@@ -232,105 +260,74 @@ class TradingEnv(gym.Env):
                     logger.info(
                         f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
             else:
-                # No position and choosing to stay out - small penalty
-                reward = -0.05
+                # No position and choosing to stay out - no penalty (realistic)
+                reward = 0.0
 
         # Update equity
         if self.position != 0:
             if self.position == 1:
-                unrealized_pnl = (price - self.entry_price) * self.lot_size * 10000
+                unrealized_pnl = (price - self.entry_price) * self.lot_size * 100
             else:  # position == -1
-                unrealized_pnl = (self.entry_price - price) * self.lot_size * 10000
+                unrealized_pnl = (self.entry_price - price) * self.lot_size * 100
             self.equity = self.balance + unrealized_pnl
         else:
             self.equity = self.balance
 
         self.equity_curve.append(self.equity)
+
+        # Track actual trades for proper analysis
+        if not hasattr(self, 'trade_history'):
+            self.trade_history = []
+
+        # Record trade if position was closed
+        if old_position != 0 and self.position == 0:
+            # Position was closed - record the trade
+            # Calculate PnL for this specific trade
+            if old_position == 1:  # Long position
+                trade_pnl = (price - self.entry_price) * self.lot_size * 100
+            else:  # Short position
+                trade_pnl = (self.entry_price - price) * self.lot_size * 100
+
+            # Get datetime information using the centralized function
+            entry_datetime = self.get_datetime_at_index(self.entry_step)
+            exit_datetime = self.get_datetime_at_index(self.current_step)
+
+            trade_info = {
+                'entry_idx': self.entry_step if hasattr(self, 'entry_step') else None,
+                'exit_idx': self.current_step,
+                'entry_datetime': entry_datetime,
+                'exit_datetime': exit_datetime,
+                'entry_price': self.entry_price,
+                'exit_price': price,
+                'position_type': 'long' if old_position == 1 else 'short',
+                'pnl': trade_pnl,
+                'commission': commission,
+                'duration': self.current_step - self.entry_step if hasattr(self, 'entry_step') else 0,
+                'reward': reward,
+                'balance': self.balance,
+                'equity': self.equity,
+                'lot_size': self.lot_size
+            }
+            self.trade_history.append(trade_info)
+
+        # Record trade entry if position was opened
+        if old_position == 0 and self.position != 0:
+            self.entry_step = self.current_step
+            self.entry_datetime = self.get_datetime_at_index(self.current_step)
+            if self.debug:
+                logger.info(f"Trade entry recorded at step {self.current_step} at {self.entry_datetime}")
+
         self.current_step += 1
 
-        # Improved reward function to prevent overfitting
-        if self.current_step > self.window_size:
-            # Calculate risk-adjusted reward
-            if len(self.equity_curve) > 1:
-                # Calculate rolling volatility (risk measure)
-                recent_equity = self.equity_curve[-min(50, len(self.equity_curve)):]
-                if len(recent_equity) > 1:
-                    returns = [(recent_equity[i] - recent_equity[i-1]) / recent_equity[i-1] 
-                              for i in range(1, len(recent_equity))]
-                    volatility = np.std(returns) if returns else 0.01
-                    
-                    # Risk-adjusted reward (Sharpe-like)
-                    if volatility > 0:
-                        risk_adjusted_reward = reward / (volatility + 0.01)
-                    else:
-                        risk_adjusted_reward = reward
-                else:
-                    risk_adjusted_reward = reward
-            else:
-                risk_adjusted_reward = reward
-            
-            # Add drawdown penalty (reduced to be less conservative)
-            if len(self.equity_curve) > 1:
-                peak_equity = max(self.equity_curve)
-                current_drawdown = (peak_equity - self.equity) / peak_equity if peak_equity > 0 else 0
-                drawdown_penalty = -current_drawdown * 0.05  # Reduced penalty for less conservative behavior
-            else:
-                drawdown_penalty = 0
-            
-            # Maximum diversity bonus to encourage aggressive trading
-            if hasattr(self, 'action_history'):
-                if len(self.action_history) > 10:
-                    recent_actions = self.action_history[-10:]
-                    action_diversity = len(set(recent_actions)) / 3.0  # 3 possible actions
-                    # Maximum diversity bonus to encourage trading
-                    diversity_bonus = (action_diversity - 0.2) * 0.2  # Maximum encouragement for diverse actions
-                else:
-                    diversity_bonus = 0
-            else:
-                diversity_bonus = 0
-                self.action_history = []
-            
-            # MUCH MORE AGGRESSIVE trading activity incentives
-            if hasattr(self, 'trading_activity'):
-                if self.trading_activity > 0:
-                    # Much stronger bonus for trading activity
-                    trading_bonus = min(self.trading_activity * 0.5, 5.0)  # 5x stronger bonus
-                else:
-                    # Much stronger penalty for no trading
-                    trading_bonus = -2.0  # 4x stronger penalty for no trading
-            else:
-                trading_bonus = 0
-                self.trading_activity = 0
-            
-            # Add MUCH STRONGER profit-taking bonus
-            if reward > 0:
-                profit_bonus = reward * 0.5  # 50% bonus on profits (5x stronger)
-            else:
-                profit_bonus = 0
-            
-            # Add MUCH STRONGER position-holding bonus
-            if self.position != 0:
-                position_bonus = 0.1  # 10x stronger bonus for holding positions
-            else:
-                position_bonus = 0
-            
-            # Combine all reward components with maximum trading incentives
-            final_reward = risk_adjusted_reward + drawdown_penalty + diversity_bonus + trading_bonus + profit_bonus + position_bonus
-            
-            # Store action for diversity tracking
-            self.action_history.append(action)
-            
-            # Cap extreme rewards to prevent overfitting
-            final_reward = np.clip(final_reward, -100, 100)
-        else:
-            final_reward = reward
+        # Simplified reward function - just use the basic reward
+        final_reward = reward
 
         # Calculate unrealized PnL
         if self.position != 0:
             if self.position == 1:
-                unrealized_pnl = (price - self.entry_price) * self.lot_size * 10000
+                unrealized_pnl = (price - self.entry_price) * self.lot_size * 100
             else:  # position == -1
-                unrealized_pnl = (self.entry_price - price) * self.lot_size * 10000
+                unrealized_pnl = (self.entry_price - price) * self.lot_size * 100
         else:
             unrealized_pnl = 0.0
 
@@ -351,7 +348,39 @@ class TradingEnv(gym.Env):
         if not hasattr(self, 'step_times'):
             self.step_times = []
         self.step_times.append(elapsed)
+        # Write trade history to a file with a unique name at the end of each episode
+        if done:
+            import os
+            import uuid
+            if hasattr(self, 'trade_history') and len(self.trade_history) > 0:
+                unique_id = uuid.uuid4().hex
+                filename = f"trade_history_{self.current_step}_{unique_id}.csv"
+                output_dir = "trade_history"
+                os.makedirs(output_dir, exist_ok=True)
+                filepath = os.path.join(output_dir, filename)
+                try:
+                    import csv
+                    # Get all possible keys from all trades for CSV header
+                    all_keys = set()
+                    for trade in self.trade_history:
+                        all_keys.update(trade.keys())
+                    fieldnames = sorted(list(all_keys))
+                    with open(filepath, "w", newline='') as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        for trade in self.trade_history:
+                            writer.writerow(trade)
+                    if self.debug:
+                        logger.info(f"Trade history written to {filepath}")
+                except Exception as e:
+                    logger.warning(f"Failed to write trade history to file: {e}")
         return result
+
+    def get_datetime_at_step(self, step):
+        """Get datetime at a specific step"""
+        if step < len(self.datetime_index):
+            return self.datetime_index[step]
+        return None
 
     def render(self):
         pass

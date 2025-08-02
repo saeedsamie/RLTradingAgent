@@ -1,7 +1,7 @@
 import json
 import os
 import time
-
+import pandas as pd
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
@@ -207,7 +207,7 @@ class TrainingMetricsCallback(BaseCallback):
         self._save_metrics()
 
 
-def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_timesteps=5_000_000, debug=True,
+def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_timesteps=5_000_000, debug=False,
                 max_episode_steps=25920, checkpoint_dir='models/checkpoints', checkpoint_freq=100000):
     """Train PPO agent on the trading environment and save the model. Uses MlpPolicy.
     Args:
@@ -227,8 +227,17 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9',
         'STOCHk_14_3_3', 'STOCHd_14_3_3', 'atr', 'obv'
     ]
-    # Keep 'close' for price calculation in env
+    
+    
+    # Ensure datetime index is preserved - check both index and first column
+    # Assume the first column is 'datetime' and set it as the index
+    
+    print(train_df)
+    print(train_df.columns)
     filtered_df = train_df[['close'] + feature_cols].copy()
+    filtered_df.index = pd.to_datetime(train_df['datetime'])
+    # filtered_df = filtered_df.drop(columns=['datetime'])
+    
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
     print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
     print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")

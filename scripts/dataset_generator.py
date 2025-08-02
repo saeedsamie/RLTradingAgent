@@ -283,7 +283,12 @@ if __name__ == "__main__":
     df_norm.to_csv("./data/processed/xauusd_5m_alpari_normalized.csv")
     print(f"Normalized data saved: {len(df_norm)} rows")
 
+    # Ensure tick size is 0.01 and round all price columns accordingly, then save to CSV
+    price_cols = [col for col in df_norm.columns if col.lower() in ['open', 'high', 'low', 'close']]
+    df_norm[price_cols] = (df_norm[price_cols] / 0.01).round() * 0.01
+    df_norm.to_csv("./data/processed/xauusd_5m_alpari_normalized_ticksize.csv")
+
     # 4. Optionally, check for missing intervals in the final file
-    find_missing_intervals(df_ind)
-    print(df_ind.info())
-    print(df_ind.head())
+    find_missing_intervals(df_norm)
+    print(df_norm.info())
+    print(df_norm.head())
