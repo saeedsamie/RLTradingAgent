@@ -181,7 +181,7 @@ class TradingEnv(gym.Env):
 
         reward = 0
         price = self.df.iloc[self.current_step]['close']
-        commission = self.lot_size * self.commission_per_lot
+        commission = self.lot_size * self.commission_per_lot/2
 
         old_balance = self.balance
         old_position = self.position
@@ -194,9 +194,7 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 reward = 0.0  # No reward for taking action
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+               
             elif self.position == -1:
                 pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
                 reward = pnl - commission  # No artificial bonus
@@ -205,18 +203,13 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
-                # Open new long position
+
                 self.entry_price = price
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
                 # No additional reward for new position
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                
 
         elif action == 2:  # Short
             if self.position == 0:
@@ -225,9 +218,7 @@ class TradingEnv(gym.Env):
                 self.balance -= commission
                 self.total_commission += commission
                 reward = 0.0  # No reward for taking action
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                
             elif self.position == 1:
                 pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
                 reward = pnl - commission  # No artificial bonus
@@ -236,19 +227,14 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                
                 # Open new short position
                 self.entry_price = price
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
                 # No additional reward for new position
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
-
+                
         elif action == 0:  # Out
             if self.position == 1:
                 pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
@@ -258,9 +244,7 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                
             elif self.position == -1:
                 pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
                 reward = pnl - commission  # No artificial bonus
@@ -269,9 +253,7 @@ class TradingEnv(gym.Env):
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                
             else:
                 # No position and choosing to stay out - no penalty (realistic)
                 reward = 0.0
@@ -294,7 +276,6 @@ class TradingEnv(gym.Env):
 
         # Record trade if position was closed
         if old_position != 0 and self.position == 0:
-            # Position was closed - record the trade
             # Calculate PnL for this specific trade
             if old_position == 1:  # Long position
                 trade_pnl = (price - self.entry_price) * self.lot_size * 100
@@ -327,8 +308,6 @@ class TradingEnv(gym.Env):
         if old_position == 0 and self.position != 0:
             self.entry_step = self.current_step
             self.entry_datetime = self.get_datetime_at_index(self.current_step)
-            if self.debug:
-                logger.info(f"Trade entry recorded at step {self.current_step} at {self.entry_datetime}")
 
         self.current_step += 1
 
