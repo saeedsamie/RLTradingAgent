@@ -14,7 +14,7 @@ from scripts.data_prep import load_data, check_missing_intervals
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized_ticksize.csv'
 MODEL_PATH = 'models/ppo_trading.zip'
 
-config = get_config('deep_network')
+config = get_config('quarterly_focused')
 WINDOW_SIZE = config['window_size']
 MAX_EPISODE_STEPS = config['max_episode_steps']
 TOTAL_TIMESTEPS = config['total_timesteps']
@@ -46,12 +46,32 @@ def handle_fresh_start():
 
 FRESH_START = '--fresh-start' in sys.argv
 DEBUG_MODE = '--debug' in sys.argv
+CPU_ONLY = '--cpu-only' in sys.argv
 
 if __name__ == '__main__':
+    # Show help if requested
+    if '--help' in sys.argv or '-h' in sys.argv:
+        print("RL Trading Agent Pipeline")
+        print("=" * 30)
+        print("Usage: python scripts/run_rl_pipeline.py [options]")
+        print("\nOptions:")
+        print("  --fresh-start    Clear all checkpoints and start training from scratch")
+        print("  --debug          Enable debug logging")
+        print("  --cpu-only       Force CPU usage (skip GPU acceleration)")
+        print("  --help, -h       Show this help message")
+        print("\nExamples:")
+        print("  python scripts/run_rl_pipeline.py                    # Normal training")
+        print("  python scripts/run_rl_pipeline.py --cpu-only         # CPU-only training")
+        print("  python scripts/run_rl_pipeline.py --fresh-start      # Fresh start")
+        print("  python scripts/run_rl_pipeline.py --debug --cpu-only # Debug with CPU")
+        sys.exit(0)
+    
     print(f"Using configuration: {config['description']}")
     print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE / 288:.1f} days)")
     print(f"Episode length: {MAX_EPISODE_STEPS} bars ({MAX_EPISODE_STEPS / 288:.1f} days)")
     print(f"Total timesteps: {TOTAL_TIMESTEPS:,} ({TOTAL_TIMESTEPS / 1000000:.1f}M)")
+    if CPU_ONLY:
+        print("⚠️  CPU-only mode enabled")
     print()
 
     # Load data
@@ -91,7 +111,8 @@ if __name__ == '__main__':
         window_size=WINDOW_SIZE,
         max_episode_steps=MAX_EPISODE_STEPS,
         total_timesteps=TOTAL_TIMESTEPS,
-        debug=DEBUG_MODE
+        debug=DEBUG_MODE,
+        force_cpu=CPU_ONLY
     )
 
     # Evaluate agent with comprehensive trade analysis

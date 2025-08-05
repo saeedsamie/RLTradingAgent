@@ -208,7 +208,7 @@ class TrainingMetricsCallback(BaseCallback):
 
 
 def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_timesteps=5_000_000, debug=False,
-                max_episode_steps=25920, checkpoint_dir='models/checkpoints', checkpoint_freq=100000):
+                max_episode_steps=25920, checkpoint_dir='models/checkpoints', checkpoint_freq=100000, force_cpu=False):
     """Train PPO agent on the trading environment and save the model. Uses MlpPolicy.
     Args:
         train_df: DataFrame with training data.
@@ -236,17 +236,51 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     filtered_df.index = pd.to_datetime(train_df['datetime'])
     
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
-    print(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
-    print(f"torch.cuda.device_count(): {torch.cuda.device_count()}")
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Using device: {device}")
-    if torch.cuda.is_available():
-        print(f"CUDA device: {torch.cuda.get_device_name(0)}")
-        print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
+    
+    # Enhanced GPU detection and logging
+    print("=== GPU Configuration ===")
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    print(f"CUDA device count: {torch.cuda.device_count()}")
+    
+    # Force CPU if requested
+    if force_cpu:
+        device = 'cpu'
+        print("CPU-only mode requested - forcing CPU usage")
+    else:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"Selected device: {device}")
+    
+    if torch.cuda.is_available() and not force_cpu:
+        print(f"CUDA version: {torch.version.cuda}")
+        for i in range(torch.cuda.device_count()):
+            gpu_name = torch.cuda.get_device_name(i)
+            gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            print(f"GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
+        
         # Test CUDA functionality
-        test_tensor = torch.randn(100, 100).cuda()
-        print(f"CUDA test tensor device: {test_tensor.device}")
-        print(f"CUDA memory after test: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
+        print("\n=== Testing CUDA Functionality ===")
+        try:
+            test_tensor = torch.randn(100, 100, device='cuda')
+            test_result = torch.mm(test_tensor, test_tensor.T)
+            print(f"✓ CUDA tensor operations working")
+            print(f"Test tensor device: {test_tensor.device}")
+            print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
+            print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
+            del test_tensor, test_result
+            torch.cuda.empty_cache()
+        except Exception as e:
+            print(f"✗ CUDA test failed: {e}")
+            print("Falling back to CPU")
+            device = 'cpu'
+    else:
+        if force_cpu:
+            print("CPU-only mode - skipping CUDA tests")
+        else:
+            print("⚠️  CUDA not available - using CPU")
+            print("To enable GPU acceleration, run: python install_gpu_support.py")
+    
+    print(f"\nFinal device selection: {device}")
     
     # Check for existing checkpoints to resume training
     import glob
@@ -305,12 +339,18 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         remaining_timesteps = total_timesteps
     
     # Verify model is on the correct device
+    print("\n=== Model Device Verification ===")
     print(f"Model device: {next(model.policy.parameters()).device}")
     print(f"Policy device: {model.policy.device}")
     print(f"Value function device: {next(model.policy.value_net.parameters()).device}")
+    
     if torch.cuda.is_available():
         print(f"CUDA memory after model creation: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
         print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
+        print(f"CUDA memory total: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        print(f"CUDA memory free: {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved(0)) / 1024**3:.1f} GB")
+    else:
+        print("Model running on CPU")
     
     callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1, total_timesteps=total_timesteps, resume_timesteps=latest_timesteps)
     checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir,
