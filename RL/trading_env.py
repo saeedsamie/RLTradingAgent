@@ -1,10 +1,8 @@
 import logging
 import time
-from datetime import datetime
 
 import gymnasium as gym
 import numpy as np
-import pandas as pd
 import torch
 from gymnasium import spaces
 
@@ -29,11 +27,11 @@ class TradingEnv(gym.Env):
                  max_episode_steps=25920):
         super().__init__()
         # Preserve datetime information if available
-        
+
         # DataFrame already has datetime index
         self.datetime_index = df.index.copy()
         self.df = df.reset_index(drop=True)
-        
+
         self.window_size = window_size
         self.current_step = window_size
         self.debug = debug
@@ -50,11 +48,11 @@ class TradingEnv(gym.Env):
         self.lot_size = lot_size
         self.commission_per_lot = commission_per_lot
         self.initial_balance = 1000.0
-        
+
         # Add sliding window support for multiple episodes
         self.episode_start_idx = 0
         self.episode_end_idx = min(window_size + max_episode_steps, len(self.df))
-        
+
         self.reset()
 
         if self.debug:
@@ -82,7 +80,7 @@ class TradingEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         start_time = time.time()
-        
+
         # Implement sliding window for multiple episodes
         # Move the episode window forward by max_episode_steps, but ensure we have enough data
         if self.episode_end_idx >= len(self.df) - self.max_episode_steps:
@@ -93,10 +91,10 @@ class TradingEnv(gym.Env):
             # Move the window forward
             self.episode_start_idx = self.episode_end_idx - self.max_episode_steps
             self.episode_end_idx = min(self.episode_start_idx + self.window_size + self.max_episode_steps, len(self.df))
-        
+
         # Set current step to the start of the episode window
         self.current_step = self.episode_start_idx + self.window_size
-        
+
         self.position = 0  # 0: Out, 1: Long, -1: Short
         self.entry_price = 0
         self.balance = self.initial_balance
@@ -109,7 +107,8 @@ class TradingEnv(gym.Env):
         self.entry_datetime = None  # Initialize entry datetime tracking
 
         if self.debug:
-            logger.info(f"Environment reset - Episode: {self.episode_start_idx} to {self.episode_end_idx}, Step: {self.current_step}, Balance: ${self.balance}")
+            logger.info(
+                f"Environment reset - Episode: {self.episode_start_idx} to {self.episode_end_idx}, Step: {self.current_step}, Balance: ${self.balance}")
 
         result = self._get_obs(), {}
         elapsed = time.time() - start_time
@@ -131,7 +130,7 @@ class TradingEnv(gym.Env):
         # If we don't have enough historical data, pad with the earliest available data in episode
         if end_idx < start_idx:
             end_idx = start_idx
-        
+
         obs = self.df.iloc[start_idx:end_idx, 1:].values.astype(np.float32)
 
         # If we don't have enough data for the full window, pad with zeros
@@ -181,7 +180,7 @@ class TradingEnv(gym.Env):
 
         reward = 0
         price = self.df.iloc[self.current_step]['close']
-        commission = self.lot_size * self.commission_per_lot
+        commission = self.lot_size * self.commission_per_lot / 2
 
         old_balance = self.balance
         old_position = self.position
