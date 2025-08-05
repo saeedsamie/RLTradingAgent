@@ -56,7 +56,7 @@ TRAINING_CONFIGS = {
     'quarterly_focused': {
         'window_size': MARKET_CYCLES['daily'],
         'max_episode_steps': MARKET_CYCLES['quarterly'],
-        'total_timesteps': 17_600_000,  # 20 epochs of quarterly episodes
+        'total_timesteps': 52_800_000,  # 60 epochs of quarterly episodes
         'train_ratio': 0.8,
         'description': 'Daily window, quarterly episodes - optimal for market cycle learning'
     },
