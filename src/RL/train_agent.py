@@ -1,17 +1,19 @@
 import json
 import os
 import time
+
 import pandas as pd
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.callbacks import CheckpointCallback
 
-from RL.trading_env import TradingEnv
+from src.RL.trading_env import TradingEnv
 
 
 class TrainingMetricsCallback(BaseCallback):
-    def __init__(self, log_path='plots/training_metrics.json', verbose=0, save_freq=100000, total_timesteps=None, resume_timesteps=0):
+    def __init__(self, log_path='outputs/plots/training_metrics.json', verbose=0, save_freq=100000, total_timesteps=None,
+                 resume_timesteps=0):
         super().__init__(verbose)
         self.log_path = log_path
         self.save_freq = save_freq
@@ -31,18 +33,18 @@ class TrainingMetricsCallback(BaseCallback):
     def _on_step(self) -> bool:
         # Log episode reward, length, loss, custom info fields, learning rate, and entropy at the end of each episode
         episode_data_found = False
-        
+
         # Try to get loss values from the model's training process
         current_loss = None
         if hasattr(self.model, 'logger') and hasattr(self.model.logger, 'name_to_value'):
             logger_values = self.model.logger.name_to_value
             # Try to get the most recent loss value
             current_loss = (
-                logger_values.get('train/policy_loss', None) or
-                logger_values.get('train/value_loss', None) or
-                logger_values.get('train/loss', None)
+                    logger_values.get('train/policy_loss', None) or
+                    logger_values.get('train/value_loss', None) or
+                    logger_values.get('train/loss', None)
             )
-        
+
         # Also try to get loss from the model's internal state if available
         if current_loss is None and hasattr(self.model, 'policy') and hasattr(self.model.policy, 'optimizer'):
             try:
@@ -51,7 +53,7 @@ class TrainingMetricsCallback(BaseCallback):
                     current_loss = self.model._last_loss
             except Exception:
                 pass
-        
+
         # Try to get loss from the model's training logs
         if current_loss is None and hasattr(self.model, 'logger'):
             try:
@@ -64,7 +66,7 @@ class TrainingMetricsCallback(BaseCallback):
                             break
             except Exception:
                 pass
-        
+
         # Try to get loss from the model's training process by accessing the model's internal state
         if current_loss is None:
             try:
@@ -75,14 +77,14 @@ class TrainingMetricsCallback(BaseCallback):
                         current_loss = self.model.train.loss
             except Exception:
                 pass
-        
+
         # Debug: Print all available logger keys to understand what's available
         if self.verbose > 0 and self.num_timesteps % 10000 == 0:
             if hasattr(self.model, 'logger') and hasattr(self.model.logger, 'name_to_value'):
                 print(f"Available logger keys at timestep {self.num_timesteps}:")
                 for key, value in self.model.logger.name_to_value.items():
                     print(f"  {key}: {value}")
-        
+
         if len(self.locals.get('infos', [])) > 0:
             for info in self.locals['infos']:
                 if 'episode' in info:
@@ -132,19 +134,20 @@ class TrainingMetricsCallback(BaseCallback):
                         entropy = logger_values.get('train/entropy_loss', None)
                         # Try different loss keys that might be available
                         loss_from_logger = (
-                            logger_values.get('train/policy_loss', None) or
-                            logger_values.get('train/value_loss', None) or
-                            logger_values.get('train/loss', None)
+                                logger_values.get('train/policy_loss', None) or
+                                logger_values.get('train/value_loss', None) or
+                                logger_values.get('train/loss', None)
                         )
                     # Use loss from logger if available, otherwise use from info
                     final_loss = loss_from_logger if loss_from_logger is not None else loss
-                    
+
                     # If we still don't have loss, try the current_loss from the beginning of the step
                     if final_loss is None:
                         final_loss = current_loss
-                    
+
                     # Debug logging for loss values
-                    if self.verbose > 0 and (loss_from_logger is not None or loss is not None or current_loss is not None):
+                    if self.verbose > 0 and (
+                            loss_from_logger is not None or loss is not None or current_loss is not None):
                         print(f"Loss values at timestep {self.num_timesteps}:")
                         print(f"  - From logger: {loss_from_logger}")
                         print(f"  - From info: {loss}")
@@ -152,11 +155,12 @@ class TrainingMetricsCallback(BaseCallback):
                         print(f"  - Final loss: {final_loss}")
                     # Calculate elapsed training time
                     elapsed_time = time.time() - self.training_start_time
-                    
+
                     # Calculate progress percentage including resumed timesteps
                     total_completed_timesteps = self.num_timesteps + self.resume_timesteps
-                    progress_percentage = (total_completed_timesteps / self.total_timesteps * 100) if hasattr(self, 'total_timesteps') else 0
-                    
+                    progress_percentage = (total_completed_timesteps / self.total_timesteps * 100) if hasattr(self,
+                                                                                                              'total_timesteps') else 0
+
                     # Check for conservative behavior with more aggressive warnings
                     if mean_trades < 1.0 and len(self.recent_trades) >= 5:
                         self.conservative_warnings += 1
@@ -164,7 +168,7 @@ class TrainingMetricsCallback(BaseCallback):
                             print(f"🚨 CRITICAL: Agent not trading! Average trades: {mean_trades:.1f}")
                             print(f"   This indicates the reward function needs to be more aggressive")
                             print(f"   Consider restarting with even stronger trading incentives")
-                    
+
                     self.metrics.append({
                         'timesteps': self.num_timesteps + self.resume_timesteps,  # Include resumed timesteps
                         'reward': reward,
@@ -227,22 +231,21 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         'MACD_12_26_9', 'MACDh_12_26_9', 'MACDs_12_26_9',
         'STOCHk_14_3_3', 'STOCHd_14_3_3', 'atr', 'obv'
     ]
-    
-    
+
     # Ensure datetime index is preserved - check both index and first column
     # Assume the first column is 'datetime' and set it as the index
 
     filtered_df = train_df[['close'] + feature_cols].copy()
     filtered_df.index = pd.to_datetime(train_df['datetime'])
-    
+
     env = TradingEnv(filtered_df, window_size=window_size, debug=debug, max_episode_steps=max_episode_steps)
-    
+
     # Enhanced GPU detection and logging
     print("=== GPU Configuration ===")
     print(f"PyTorch version: {torch.__version__}")
     print(f"CUDA available: {torch.cuda.is_available()}")
     print(f"CUDA device count: {torch.cuda.device_count()}")
-    
+
     # Force CPU if requested
     if force_cpu:
         device = 'cpu'
@@ -250,14 +253,14 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     else:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         print(f"Selected device: {device}")
-    
+
     if torch.cuda.is_available() and not force_cpu:
         print(f"CUDA version: {torch.version.cuda}")
         for i in range(torch.cuda.device_count()):
             gpu_name = torch.cuda.get_device_name(i)
-            gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024 ** 3
             print(f"GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
-        
+
         # Test CUDA functionality
         print("\n=== Testing CUDA Functionality ===")
         try:
@@ -265,8 +268,8 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
             test_result = torch.mm(test_tensor, test_tensor.T)
             print(f"✓ CUDA tensor operations working")
             print(f"Test tensor device: {test_tensor.device}")
-            print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
-            print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
+            print(f"CUDA memory allocated: {torch.cuda.memory_allocated(0) / 1024 ** 2:.2f} MB")
+            print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024 ** 2:.2f} MB")
             del test_tensor, test_result
             torch.cuda.empty_cache()
         except Exception as e:
@@ -279,18 +282,18 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         else:
             print("⚠️  CUDA not available - using CPU")
             print("To enable GPU acceleration, run: python install_gpu_support.py")
-    
+
     print(f"\nFinal device selection: {device}")
-    
+
     # Check for existing checkpoints to resume training
     import glob
     import re
-    
+
     # Find the latest checkpoint
     checkpoint_files = glob.glob(os.path.join(checkpoint_dir, 'ppo_trading_*_steps.zip'))
     latest_checkpoint = None
     latest_timesteps = 0
-    
+
     if checkpoint_files:
         for checkpoint_file in checkpoint_files:
             # Extract timesteps from filename (e.g., ppo_trading_100000_steps.zip -> 100000)
@@ -300,7 +303,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
                 if timesteps > latest_timesteps:
                     latest_timesteps = timesteps
                     latest_checkpoint = checkpoint_file
-    
+
     # ULTRA AGGRESSIVE PPO configuration to force trading
     print(f"Creating PPO model with device: {device}")
     model = PPO(
@@ -321,12 +324,13 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         target_kl=0.01,  # Lower KL divergence target for stable deep learning
         tensorboard_log="./logs/",  # Enable tensorboard logging
         policy_kwargs={
-            "net_arch": dict(pi=[512, 512, 256, 256, 128], vf=[512, 512, 256, 256, 128]),  # Deep network for complex patterns
+            "net_arch": dict(pi=[512, 512, 256, 256, 128], vf=[512, 512, 256, 256, 128]),
+            # Deep network for complex patterns
             "activation_fn": torch.nn.Tanh,  # Tanh for better gradient flow
             "ortho_init": True,  # Orthogonal initialization for better training
         }
     )
-    
+
     # Load latest checkpoint if available
     if latest_checkpoint and os.path.exists(latest_checkpoint):
         print(f"Found checkpoint: {latest_checkpoint}")
@@ -337,22 +341,24 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
     else:
         print("No checkpoint found. Starting training from scratch.")
         remaining_timesteps = total_timesteps
-    
+
     # Verify model is on the correct device
     print("\n=== Model Device Verification ===")
     print(f"Model device: {next(model.policy.parameters()).device}")
     print(f"Policy device: {model.policy.device}")
     print(f"Value function device: {next(model.policy.value_net.parameters()).device}")
-    
+
     if torch.cuda.is_available():
-        print(f"CUDA memory after model creation: {torch.cuda.memory_allocated(0) / 1024**2:.2f} MB")
-        print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
-        print(f"CUDA memory total: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-        print(f"CUDA memory free: {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved(0)) / 1024**3:.1f} GB")
+        print(f"CUDA memory after model creation: {torch.cuda.memory_allocated(0) / 1024 ** 2:.2f} MB")
+        print(f"CUDA memory cached: {torch.cuda.memory_reserved(0) / 1024 ** 2:.2f} MB")
+        print(f"CUDA memory total: {torch.cuda.get_device_properties(0).total_memory / 1024 ** 3:.1f} GB")
+        print(
+            f"CUDA memory free: {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved(0)) / 1024 ** 3:.1f} GB")
     else:
         print("Model running on CPU")
-    
-    callback = TrainingMetricsCallback(log_path='plots/training_metrics.json', save_freq=100, verbose=1, total_timesteps=total_timesteps, resume_timesteps=latest_timesteps)
+
+    callback = TrainingMetricsCallback(log_path='outputs/plots/training_metrics.json', save_freq=100, verbose=1,
+                                       total_timesteps=total_timesteps, resume_timesteps=latest_timesteps)
     checkpoint_callback = CheckpointCallback(save_freq=checkpoint_freq, save_path=checkpoint_dir,
                                              name_prefix='ppo_trading')
     start_train = time.time()

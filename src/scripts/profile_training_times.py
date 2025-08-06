@@ -1,6 +1,8 @@
-import pandas as pd
 import numpy as np
-from RL.train_agent import train_agent
+import pandas as pd
+
+from src.RL import train_agent
+
 
 def generate_sample_data(n=1000):
     np.random.seed(42)
@@ -31,10 +33,12 @@ def generate_sample_data(n=1000):
     }
     return pd.DataFrame(data)
 
+
 if __name__ == "__main__":
     print("Generating sample data...")
     df = generate_sample_data(1000)
     print("Starting training and profiling...")
     # Use small timesteps for quick profiling
-    train_agent(df, model_path='models/ppo_trading_profiled.zip', window_size=50, total_timesteps=2000, debug=False, max_episode_steps=200)
-    print("Profiling complete.") 
+    train_agent(df, model_path='models/ppo_trading_profiled.zip', window_size=50, total_timesteps=2000, debug=False,
+                max_episode_steps=200)
+    print("Profiling complete.")

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from scripts.dataset_generator import fill_time_series_holes, remove_duplicates, add_indicators, find_missing_intervals
+from src.scripts import fill_time_series_holes, remove_duplicates, add_indicators, find_missing_intervals
 
 def test_fill_time_series_holes_interpolate():
     # Create a DataFrame with missing 5min intervals

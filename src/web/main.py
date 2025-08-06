@@ -7,15 +7,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from fastapi.templating import Jinja2Templates
 
+from src.scripts.run_rl_pipeline import CONFIG
+
 app = FastAPI()
 
 # Set up templates directory
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="src/templates")
 
 # Static files are not needed as the template uses CDN for libraries and inline CSS
 
 # Path to your filled and indicated CSV
-DATA_PATH = "xauusd_5m_alpari_filled_indicated.csv"
+DATA_PATH = "output/data/xauusd_5m_alpari_filled_indicated.csv"
 
 
 @app.get("/chart", response_class=HTMLResponse)
@@ -60,8 +62,10 @@ def get_training_metrics():
     """
     Returns the latest training metrics as JSON for live or on-demand plotting.
     """
-    metrics_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'plots', 'training_metrics.json')
+    metrics_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '../outputs', 'plots',
+                                'training_metrics.json')
     if not os.path.exists(metrics_path):
+        print(f"No training metrics found at {metrics_path}")
         return {"error": "No training metrics found."}
     with open(metrics_path, 'r') as f:
         metrics = json.load(f)
@@ -73,8 +77,8 @@ def get_training_config():
     """
     Returns the current training configuration including total timesteps.
     """
-    try:    
-        from scripts.run_rl_pipeline import config
+    try:
+        config = CONFIG 
         logging.info(config)
         return {
             "total_timesteps": config['total_timesteps'],

@@ -4,7 +4,7 @@ import numpy as np
 
 def detailed_analysis():
     """Detailed analysis of training progression"""
-    with open('plots/training_metrics.json', 'r') as f:
+    with open('../outputs/plots/training_metrics.json', 'r') as f:
         metrics = json.load(f)
     
     df = pd.DataFrame(metrics)

@@ -4,17 +4,17 @@ Configuration file for RL Trading Agent with market cycle-based settings.
 
 # Market cycle configurations (in 5-minute bars)
 MARKET_CYCLES = {
-    'hourly': 12,           # 1 hour
-    'daily': 288,           # 24 hours (24 * 12)
-    'weekly': 2016,         # 7 days (7 * 288)
-    'monthly': 8767,        # ~30.44 days
-    'quarterly': 25920,     # ~90 days
-    'yearly': 105192        # ~365.25 days
+    'hourly': 12,  # 1 hour
+    'daily': 288,  # 24 hours (24 * 12)
+    'weekly': 2016,  # 7 days (7 * 288)
+    'monthly': 8767,  # ~30.44 days
+    'quarterly': 25920,  # ~90 days
+    'yearly': 105192  # ~365.25 days
 }
 
 # Default configuration
 DEFAULT_CONFIG = {
-    'window_size': MARKET_CYCLES['daily'],      # Daily cycle for observation window
+    'window_size': MARKET_CYCLES['daily'],  # Daily cycle for observation window
     'max_episode_steps': MARKET_CYCLES['weekly'],  # Weekly cycle for episode length
     'total_timesteps': 5_000_000,
     'debug': False,
@@ -34,7 +34,7 @@ TRAINING_CONFIGS = {
     },
     'medium_term': {
         'window_size': MARKET_CYCLES['daily'],
-        'max_episode_steps': MARKET_CYCLES['weekly'], 
+        'max_episode_steps': MARKET_CYCLES['weekly'],
         'total_timesteps': 5_000_000,
         'train_ratio': 0.8,
         'description': 'Daily window, weekly episodes - balanced approach with better market cycles'
@@ -90,6 +90,7 @@ TRAINING_CONFIGS = {
     }
 }
 
+
 def get_config(config_name='quarterly_focused'):
     """Get configuration by name."""
     if config_name in TRAINING_CONFIGS:
@@ -98,15 +99,17 @@ def get_config(config_name='quarterly_focused'):
         print(f"Warning: Config '{config_name}' not found. Using default.")
         return TRAINING_CONFIGS['quarterly_focused']
 
+
 def print_available_configs():
     """Print all available configurations."""
     print("Available configurations:")
     for name, config in TRAINING_CONFIGS.items():
         print(f"  {name}: {config['description']}")
-        print(f"    Window: {config['window_size']} bars ({config['window_size']/288:.1f} days)")
-        print(f"    Episode: {config['max_episode_steps']} bars ({config['max_episode_steps']/288:.1f} days)")
-        print(f"    Timesteps: {config['total_timesteps']:,} ({config['total_timesteps']/1000000:.1f}M)")
+        print(f"    Window: {config['window_size']} bars ({config['window_size'] / 288:.1f} days)")
+        print(f"    Episode: {config['max_episode_steps']} bars ({config['max_episode_steps'] / 288:.1f} days)")
+        print(f"    Timesteps: {config['total_timesteps']:,} ({config['total_timesteps'] / 1000000:.1f}M)")
         print()
+
 
 if __name__ == "__main__":
     print_available_configs()

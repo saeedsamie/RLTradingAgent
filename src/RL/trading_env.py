@@ -104,6 +104,7 @@ class TradingEnv(gym.Env):
         self.total_commission = 0
         self.total_pnl = 0
         self.entry_step = None  # Initialize entry step tracking
+        self.trades_this_episode = 0  # Reset trades counter for new episode
         self.entry_datetime = None  # Initialize entry datetime tracking
 
         if self.debug:
@@ -178,6 +179,7 @@ class TradingEnv(gym.Env):
         done = (self.current_step >= self.episode_end_idx - 1) or (
                 self.current_step >= self.episode_start_idx + self.window_size + self.max_episode_steps)
 
+        # IMPROVED REWARD FUNCTION TO PREVENT OVERTRADING
         reward = 0
         price = self.df.iloc[self.current_step]['close']
         commission = self.lot_size * self.commission_per_lot / 2
@@ -185,95 +187,143 @@ class TradingEnv(gym.Env):
         old_balance = self.balance
         old_position = self.position
 
-        # Trading logic with realistic rewards
+        # Track trades per episode to discourage overtrading
+        if not hasattr(self, 'trades_this_episode'):
+            self.trades_this_episode = 0
+
+        # Trading logic with IMPROVED rewards
         if action == 1:  # Long
             if self.position == 0:
+                # Opening new position - add penalty for overtrading
                 self.entry_price = price
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
-                reward = 0.0  # No reward for taking action
+                self.trades_this_episode += 1
+
+                # Penalty increases with more trades (discourages overtrading)
+                overtrading_penalty = -0.1 * (self.trades_this_episode / 10)  # More penalty for more trades
+                reward = overtrading_penalty
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Trades: {self.trades_this_episode}, Penalty: {overtrading_penalty:.3f}")
+
             elif self.position == -1:
-                pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
-                reward = pnl - commission  # No artificial bonus
+                # Closing short and opening long
+                pnl = (self.entry_price - price) * self.lot_size * 100
+                base_reward = pnl - commission
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+
                 # Open new long position
                 self.entry_price = price
                 self.position = 1
                 self.balance -= commission
                 self.total_commission += commission
-                # No additional reward for new position
+                self.trades_this_episode += 1
+
+                # Boost reward for profitable trades, reduce for losses
+                if base_reward > 0:
+                    reward = base_reward * 1.5  # 50% bonus for profitable trades
+                else:
+                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                        f"Step {self.current_step}: CLOSE SHORT & OPEN LONG - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
 
         elif action == 2:  # Short
             if self.position == 0:
+                # Opening new position - add penalty for overtrading
                 self.entry_price = price
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
-                reward = 0.0  # No reward for taking action
+                self.trades_this_episode += 1
+
+                # Penalty increases with more trades (discourages overtrading)
+                overtrading_penalty = -0.1 * (self.trades_this_episode / 10)
+                reward = overtrading_penalty
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Trades: {self.trades_this_episode}, Penalty: {overtrading_penalty:.3f}")
+
             elif self.position == 1:
-                pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
-                reward = pnl - commission  # No artificial bonus
+                # Closing long and opening short
+                pnl = (price - self.entry_price) * self.lot_size * 100
+                base_reward = pnl - commission
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
-                if self.debug:
-                    logger.info(
-                        f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+
                 # Open new short position
                 self.entry_price = price
                 self.position = -1
                 self.balance -= commission
                 self.total_commission += commission
-                # No additional reward for new position
+                self.trades_this_episode += 1
+
+                # Boost reward for profitable trades, reduce for losses
+                if base_reward > 0:
+                    reward = base_reward * 1.5  # 50% bonus for profitable trades
+                else:
+                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Lot: {self.lot_size:.2f}, Commission: ${commission:.2f}")
+                        f"Step {self.current_step}: CLOSE LONG & OPEN SHORT - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
 
         elif action == 0:  # Out
             if self.position == 1:
-                pnl = (price - self.entry_price) * self.lot_size * 100  # Realistic pip value
-                reward = pnl - commission  # No artificial bonus
+                # Closing long position
+                pnl = (price - self.entry_price) * self.lot_size * 100
+                base_reward = pnl - commission
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+
+                # Boost reward for profitable trades, reduce for losses
+                if base_reward > 0:
+                    reward = base_reward * 1.5  # 50% bonus for profitable trades
+                else:
+                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE LONG - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE LONG - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+
             elif self.position == -1:
-                pnl = (self.entry_price - price) * self.lot_size * 100  # Realistic pip value
-                reward = pnl - commission  # No artificial bonus
+                # Closing short position
+                pnl = (self.entry_price - price) * self.lot_size * 100
+                base_reward = pnl - commission
                 self.balance += pnl - commission
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
                 self.total_commission += commission
+
+                # Boost reward for profitable trades, reduce for losses
+                if base_reward > 0:
+                    reward = base_reward * 1.5  # 50% bonus for profitable trades
+                else:
+                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT - Price: ${price:.2f}, PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE SHORT - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+
             else:
-                # No position and choosing to stay out - no penalty (realistic)
-                reward = 0.0
+                # No position and choosing to stay out - SMALL POSITIVE REWARD
+                reward = 0.01  # Encourage patience when no good opportunities
 
         # Update equity
         if self.position != 0:

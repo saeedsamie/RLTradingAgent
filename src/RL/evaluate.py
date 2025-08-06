@@ -1,8 +1,9 @@
 import numpy as np
+import pandas as pd
 import torch
 from stable_baselines3 import PPO
 
-from RL.trading_env import TradingEnv
+from src.RL.trading_env import TradingEnv
 
 
 def evaluate_agent(model_path, test_df, window_size=288, max_episode_steps=25920):

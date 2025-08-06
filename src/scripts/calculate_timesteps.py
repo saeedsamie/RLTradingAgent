@@ -4,14 +4,14 @@ Script to calculate optimal total_timesteps for RL training.
 
 import pandas as pd
 
-from scripts.config import get_config
+from src.config.config import get_config
 
 
 def calculate_optimal_timesteps():
     """Calculate optimal total_timesteps based on data and configuration."""
 
     # Load data to get total size
-    df = pd.read_csv('../data/processed/xauusd_5m_alpari_normalized.csv')
+    df = pd.read_csv('../../data/processed/xauusd_5m_alpari_normalized.csv')
     total_data_points = len(df)
 
     # Get current configuration

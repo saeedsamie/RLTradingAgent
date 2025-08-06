@@ -1,47 +1,54 @@
 import json
 import os
+import sys
+from pathlib import Path
+import glob
+import shutil
+
+# Add the project root to Python path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 import numpy as np
 import pandas as pd
-from RL.train_agent import train_agent
 
-from RL.evaluate import evaluate_with_trade_analysis
-from RL.plotting import plot_equity_curve
-from scripts.config import get_config
-from scripts.data_prep import load_data, check_missing_intervals
+from src.RL.evaluate import analyze_trades as evaluate_with_trade_analysis
+from src.RL.plotting import plot_equity_curve
+from src.RL.train_agent import train_agent
+from src.config.config import get_config
+from src.scripts.data_prep import load_data, check_missing_intervals
 
 # Configuration - using quarterly market cycles for better pattern recognition
 DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized_ticksize.csv'
-MODEL_PATH = 'models/ppo_trading.zip'
+MODEL_PATH = 'outputs/models/ppo_trading.zip'
 
-config = get_config('quarterly_focused')
-WINDOW_SIZE = config['window_size']
-MAX_EPISODE_STEPS = config['max_episode_steps']
-TOTAL_TIMESTEPS = config['total_timesteps']
-TRAIN_RATIO = config['train_ratio']
+CONFIG = get_config('quarterly_focused')
+WINDOW_SIZE = CONFIG['window_size']
+MAX_EPISODE_STEPS = CONFIG['max_episode_steps']
+TOTAL_TIMESTEPS = CONFIG['total_timesteps']
+TRAIN_RATIO = CONFIG['train_ratio']
 
 # Add command line argument for fresh start
 import sys
+
+
 def handle_fresh_start():
-            import os
-            import glob
-            import shutil
 
-            print("Fresh start requested. Clearing existing checkpoints...")
-            checkpoint_files = glob.glob('models/checkpoints/ppo_trading_*_steps.zip')
-            for file in checkpoint_files:
-                os.remove(file)
-                print(f"Removed: {file}")
-            print("Starting training from scratch.")
+    print(f"\n=== Fresh start requested ===")
+    checkpoint_files = glob.glob('outputs/models/checkpoints/ppo_trading_*_steps.zip')
+    for file in checkpoint_files:
+        os.remove(file)
+        print(f"Removed: {file}")
+    print("Starting training from scratch.")
 
-            # Clean up the 'plots' and 'trade_history' directories for a fresh start
-            for dir_path in ['plots', 'trade_history']:
-                if os.path.exists(dir_path):
-                    print(f"Clearing directory: {dir_path}")
-                    shutil.rmtree(dir_path)
-                    print(f"Removed: {dir_path}")
-                os.makedirs(dir_path, exist_ok=True)
-                print(f"Created empty directory: {dir_path}")
+    # Clean up the 'plots' and 'trade_history' directories for a fresh start
+    for dir_path in ['outputs/plots', 'outputs/trade_history']:
+        if os.path.exists(dir_path):
+            print(f"Clearing directory: {dir_path}")
+            shutil.rmtree(dir_path)
+            print(f"Removed: {dir_path}")
+        os.makedirs(dir_path, exist_ok=True)
+        print(f"Created empty directory: {dir_path}")
 
 
 FRESH_START = '--fresh-start' in sys.argv
@@ -65,8 +72,8 @@ if __name__ == '__main__':
         print("  python scripts/run_rl_pipeline.py --fresh-start      # Fresh start")
         print("  python scripts/run_rl_pipeline.py --debug --cpu-only # Debug with CPU")
         sys.exit(0)
-    
-    print(f"Using configuration: {config['description']}")
+
+    print(f"Using configuration: {CONFIG['description']}")
     print(f"Window size: {WINDOW_SIZE} bars ({WINDOW_SIZE / 288:.1f} days)")
     print(f"Episode length: {MAX_EPISODE_STEPS} bars ({MAX_EPISODE_STEPS / 288:.1f} days)")
     print(f"Total timesteps: {TOTAL_TIMESTEPS:,} ({TOTAL_TIMESTEPS / 1000000:.1f}M)")
@@ -166,7 +173,7 @@ if __name__ == '__main__':
     # Write comprehensive trade data to CSV with datetime information
     import csv
 
-    trades_csv_path = "plots/trades.csv"
+    trades_csv_path = "outputs/plots/trades.csv"
     with open(trades_csv_path, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([
@@ -199,7 +206,7 @@ if __name__ == '__main__':
     print(f"Comprehensive trade data with datetime written to {trades_csv_path}")
 
     # Write trade statistics to CSV
-    stats_csv_path = "plots/trade_statistics.csv"
+    stats_csv_path = "outout/plots/trade_statistics.csv"
     with open(stats_csv_path, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["metric", "value"])
@@ -253,7 +260,7 @@ if __name__ == '__main__':
         f"Risk level (Max DD): {'HIGH' if results['max_drawdown'] > 0.2 else 'MODERATE' if results['max_drawdown'] > 0.1 else 'LOW'}")
 
     # Save comprehensive results to JSON for later analysis
-    results_json_path = "plots/evaluation_results.json"
+    results_json_path = "outputs/plots/evaluation_results.json"
 
     # Prepare results for JSON serialization (convert numpy types to native Python types)
     json_results = {
@@ -275,7 +282,7 @@ if __name__ == '__main__':
     }
 
     # Ensure plots directory exists
-    os.makedirs('plots', exist_ok=True)
+    os.makedirs('outputs/plots', exist_ok=True)
 
     with open(results_json_path, 'w') as f:
         json.dump(json_results, f, indent=2)
@@ -285,4 +292,4 @@ if __name__ == '__main__':
     print(f"1. {trades_csv_path} - Detailed trade data")
     print(f"2. {stats_csv_path} - Trade statistics")
     print(f"3. {results_json_path} - Complete evaluation results")
-    print(f"4. plots/equity_curve.png - Equity curve visualization")
+    print(f"4. outputs/plots/equity_curve.png - Equity curve visualization")
