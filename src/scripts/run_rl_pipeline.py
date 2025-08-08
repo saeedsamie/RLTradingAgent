@@ -18,11 +18,11 @@ from src.RL.train_agent import train_agent
 from src.config.config import get_config
 from src.scripts.data_prep import load_data, check_missing_intervals
 
-# Configuration - using quarterly market cycles for better pattern recognition
-DATA_PATH = 'data/processed/xauusd_5m_alpari_normalized_ticksize.csv'
+# Configuration - using improved dataset for better reward improvement
+DATA_PATH = 'data/processed/xauusd_5m_improved.csv'
 MODEL_PATH = 'outputs/models/ppo_trading.zip'
 
-CONFIG = get_config('quarterly_focused')
+CONFIG = get_config('deep_network')
 WINDOW_SIZE = CONFIG['window_size']
 MAX_EPISODE_STEPS = CONFIG['max_episode_steps']
 TOTAL_TIMESTEPS = CONFIG['total_timesteps']

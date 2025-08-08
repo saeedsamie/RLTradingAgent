@@ -324,7 +324,7 @@ def train_agent(train_df, model_path='ppo_trading.zip', window_size=288, total_t
         target_kl=0.01,  # Lower KL divergence target for stable deep learning
         tensorboard_log="./logs/",  # Enable tensorboard logging
         policy_kwargs={
-            "net_arch": dict(pi=[512, 512, 256, 256, 128], vf=[512, 512, 256, 256, 128]),
+            "net_arch": dict(pi=[512, 256, 128], vf=[512, 256, 128]),
             # Deep network for complex patterns
             "activation_fn": torch.nn.Tanh,  # Tanh for better gradient flow
             "ortho_init": True,  # Orthogonal initialization for better training

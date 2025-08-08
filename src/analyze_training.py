@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def load_training_metrics(file_path='plots/training_metrics.json'):
+def load_training_metrics(file_path='outputs/plots/training_metrics.json'):
     """Load training metrics from JSON file"""
     with open(file_path, 'r') as f:
         metrics = json.load(f)

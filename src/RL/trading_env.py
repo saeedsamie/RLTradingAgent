@@ -20,49 +20,130 @@ class TradingEnv(gym.Env):
     - Commission fee per contract
     - Tracks USD balance, open positions, and PnL
     - Observation includes windowed features + [balance, position]
+    - Uses Differential Sharpe Ratio (DSR) for reward calculation
     """
     metadata = {'render.modes': ['human']}
 
     def __init__(self, df, window_size=288, commission_per_lot=50, lot_size=0.01, debug=False,
-                 max_episode_steps=25920):
-        super().__init__()
-        # Preserve datetime information if available
+                 max_episode_steps=25920, beta=0.9, alpha=5.0, epsilon=1e-6, initial_balance=1000.0):
+        """
+        Initialize the trading environment with DSR-based reward function.
 
-        # DataFrame already has datetime index
+        Args:
+            df (pd.DataFrame): DataFrame with price data and features. First column must be 'close'.
+            window_size (int): Number of time steps to include in each observation.
+            commission_per_lot (float): Commission fee per lot traded.
+            lot_size (float): Size of each trading lot.
+            debug (bool): Whether to enable debug logging.
+            max_episode_steps (int): Maximum number of steps per episode.
+            beta (float): EMA decay factor for DSR calculation (0.9-0.99).
+                Higher values give more weight to historical data.
+            alpha (float): Penalty weight for spread costs in reward calculation.
+                Higher values discourage frequent trading.
+            epsilon (float): Small constant to avoid division by zero in Sharpe calculation.
+            initial_balance (float): Initial account balance in USD.
+        """
+        super().__init__()
+
+        # Validate and store input parameters
+        if not 0 < beta < 1:
+            raise ValueError("beta must be between 0 and 1")
+        if alpha < 0:
+            raise ValueError("alpha must be non-negative")
+        if epsilon <= 0:
+            raise ValueError("epsilon must be positive")
+        if initial_balance <= 0:
+            raise ValueError("initial_balance must be positive")
+
+        # Store DataFrame with datetime index
         self.datetime_index = df.index.copy()
         self.df = df.reset_index(drop=True)
 
+        # Basic environment parameters
         self.window_size = window_size
         self.current_step = window_size
         self.debug = debug
         self.max_episode_steps = max_episode_steps
-        # First column is 'close', rest are features
-        self.feature_cols = self.df.columns[1:]
-        self.num_features = len(self.feature_cols)
-        # Action: 0=Out, 1=Long, 2=Short
-        self.action_space = spaces.Discrete(3)
-        # +2 for [balance, position]
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(window_size, self.num_features + 2), dtype=np.float32
-        )
+        self.initial_balance = initial_balance
+
+        # Trading parameters
         self.lot_size = lot_size
         self.commission_per_lot = commission_per_lot
-        self.initial_balance = 1000.0
 
-        # Add sliding window support for multiple episodes
+        # Feature setup
+        self.feature_cols = self.df.columns[1:]  # First column is 'close'
+        self.num_features = len(self.feature_cols)
+
+        # Action and observation space
+        self.action_space = spaces.Discrete(3)  # 0=Out, 1=Long, 2=Short
+        self.observation_space = spaces.Box(  # Features + [balance, position]
+            low=-np.inf, high=np.inf, 
+            shape=(window_size, self.num_features + 2), 
+            dtype=np.float32
+        )
+
+        # Episode window setup
         self.episode_start_idx = 0
         self.episode_end_idx = min(window_size + max_episode_steps, len(self.df))
 
-        self.reset()
+        # DSR parameters
+        self.beta = beta  # EMA decay factor (0.9-0.99)
+        self.alpha = alpha  # Spread penalty weight
+        self.epsilon = epsilon  # Small constant to avoid division by zero
+
+        # Initialize DSR variables
+        self._init_dsr_variables()
 
         if self.debug:
-            logger.info(f"TradingEnv initialized with {len(self.df)} data points")
-            logger.info(f"Window size: {self.window_size}, Max episode steps: {self.max_episode_steps}")
-            logger.info(f"Action space: {self.action_space}")
-            logger.info(f"Observation space: {self.observation_space}")
-            logger.info(f"Initial balance: ${self.initial_balance}")
-            logger.info(f"Datetime range: {self.datetime_index[0]} to {self.datetime_index[-1]}")
-            logger.info(f"Episode range: {self.episode_start_idx} to {self.episode_end_idx}")
+            self._log_initialization()
+
+        self.reset()
+
+    def _init_dsr_variables(self):
+        """Initialize or reset DSR-related variables."""
+        self.mu = 0  # EMA of returns
+        self.sigma2 = self.epsilon  # EMA of squared deviations (variance)
+        self.prev_sharpe = 0  # Previous Sharpe ratio
+        self.returns_history = []  # List to store returns for analysis
+        self.current_return = 0  # Current return
+        self.current_sharpe = 0  # Current Sharpe ratio
+
+    def _log_initialization(self):
+        """Log initialization parameters when debug is enabled."""
+        logger.info(f"TradingEnv initialized with {len(self.df)} data points")
+        logger.info(f"Window size: {self.window_size}, Max episode steps: {self.max_episode_steps}")
+        logger.info(f"Action space: {self.action_space}")
+        logger.info(f"Observation space: {self.observation_space}")
+        logger.info(f"Initial balance: ${self.initial_balance}")
+        logger.info(f"Datetime range: {self.datetime_index[0]} to {self.datetime_index[-1]}")
+        logger.info(f"Episode range: {self.episode_start_idx} to {self.episode_end_idx}")
+        logger.info(f"DSR parameters - beta: {self.beta}, alpha: {self.alpha}, epsilon: {self.epsilon}")
+        logger.info(f"Trading parameters - Lot size: {self.lot_size}, Commission per lot: {self.commission_per_lot}")
+
+    def _calculate_return(self, old_balance, new_balance):
+        """Calculate return for DSR computation"""
+        if old_balance == 0:
+            return 0
+        return (new_balance - old_balance) / old_balance
+
+    def _update_dsr_stats(self, return_t):
+        """Update DSR statistics with new return"""
+        # Update EMA of returns
+        self.mu = self.beta * self.mu + (1 - self.beta) * return_t
+        
+        # Update EMA of squared deviations (variance)
+        self.sigma2 = self.beta * self.sigma2 + (1 - self.beta) * (return_t - self.mu) ** 2
+        
+        # Calculate current Sharpe ratio
+        current_sharpe = self.mu / (np.sqrt(self.sigma2) + self.epsilon)
+        
+        # Calculate DSR (change in Sharpe)
+        dsr = current_sharpe - self.prev_sharpe
+        
+        # Store current Sharpe as previous for next step
+        self.prev_sharpe = current_sharpe
+        
+        return dsr
 
     def get_datetime_at_index(self, index):
         """
@@ -106,6 +187,12 @@ class TradingEnv(gym.Env):
         self.entry_step = None  # Initialize entry step tracking
         self.trades_this_episode = 0  # Reset trades counter for new episode
         self.entry_datetime = None  # Initialize entry datetime tracking
+
+        # Reset DSR-related variables
+        self.mu = 0  # Reset EMA of returns
+        self.sigma2 = self.epsilon  # Reset EMA of squared deviations (variance)
+        self.prev_sharpe = 0  # Reset previous Sharpe ratio
+        self.returns_history = []  # Reset returns history
 
         if self.debug:
             logger.info(
@@ -179,151 +266,174 @@ class TradingEnv(gym.Env):
         done = (self.current_step >= self.episode_end_idx - 1) or (
                 self.current_step >= self.episode_start_idx + self.window_size + self.max_episode_steps)
 
-        # IMPROVED REWARD FUNCTION TO PREVENT OVERTRADING
+        # DSR-based reward function with spread penalty
         reward = 0
         price = self.df.iloc[self.current_step]['close']
-        commission = self.lot_size * self.commission_per_lot / 2
+        spread = self.lot_size * self.commission_per_lot / 2  # Using commission as spread for now
 
         old_balance = self.balance
         old_position = self.position
+        old_equity = self.equity
 
-        # Track trades per episode to discourage overtrading
+        # Track trades per episode
         if not hasattr(self, 'trades_this_episode'):
             self.trades_this_episode = 0
 
         # Trading logic with IMPROVED rewards
         if action == 1:  # Long
             if self.position == 0:
-                # Opening new position - add penalty for overtrading
+                # Opening new long position
                 self.entry_price = price
                 self.position = 1
-                self.balance -= commission
-                self.total_commission += commission
+                self.balance -= spread
+                self.total_commission += spread
                 self.trades_this_episode += 1
 
-                # Penalty increases with more trades (discourages overtrading)
-                overtrading_penalty = -0.1 * (self.trades_this_episode / 10)  # More penalty for more trades
-                reward = overtrading_penalty
+                # Calculate return and update DSR
+                new_equity = self.balance  # No unrealized PnL yet
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
+                
+                # DSR reward with spread penalty
+                reward = dsr - self.alpha * spread
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, Trades: {self.trades_this_episode}, Penalty: {overtrading_penalty:.3f}")
+                        f"Step {self.current_step}: OPEN LONG - Price: ${price:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * spread:.4f}")
 
             elif self.position == -1:
                 # Closing short and opening long
                 pnl = (self.entry_price - price) * self.lot_size * 100
-                base_reward = pnl - commission
-                self.balance += pnl - commission
+                self.balance += pnl - spread  # Close short position
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
-                self.total_commission += commission
+                self.total_commission += spread
+
+                # Calculate return and update DSR for closing short
+                new_equity = self.balance
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
 
                 # Open new long position
                 self.entry_price = price
                 self.position = 1
-                self.balance -= commission
-                self.total_commission += commission
+                self.balance -= spread  # Open long position
+                self.total_commission += spread
                 self.trades_this_episode += 1
 
-                # Boost reward for profitable trades, reduce for losses
-                if base_reward > 0:
-                    reward = base_reward * 1.5  # 50% bonus for profitable trades
-                else:
-                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+                # Calculate final DSR reward with spread penalty
+                reward = dsr - self.alpha * (2 * spread)  # Double spread for two actions
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT & OPEN LONG - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE SHORT & OPEN LONG - PnL: ${pnl:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * 2 * spread:.4f}")
 
         elif action == 2:  # Short
             if self.position == 0:
-                # Opening new position - add penalty for overtrading
+                # Opening new short position
                 self.entry_price = price
                 self.position = -1
-                self.balance -= commission
-                self.total_commission += commission
+                self.balance -= spread
+                self.total_commission += spread
                 self.trades_this_episode += 1
 
-                # Penalty increases with more trades (discourages overtrading)
-                overtrading_penalty = -0.1 * (self.trades_this_episode / 10)
-                reward = overtrading_penalty
+                # Calculate return and update DSR
+                new_equity = self.balance  # No unrealized PnL yet
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
+                
+                # DSR reward with spread penalty
+                reward = dsr - self.alpha * spread
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, Trades: {self.trades_this_episode}, Penalty: {overtrading_penalty:.3f}")
+                        f"Step {self.current_step}: OPEN SHORT - Price: ${price:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * spread:.4f}")
 
             elif self.position == 1:
                 # Closing long and opening short
                 pnl = (price - self.entry_price) * self.lot_size * 100
-                base_reward = pnl - commission
-                self.balance += pnl - commission
+                self.balance += pnl - spread  # Close long position
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
-                self.total_commission += commission
+                self.total_commission += spread
+
+                # Calculate return and update DSR for closing long
+                new_equity = self.balance
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
 
                 # Open new short position
                 self.entry_price = price
                 self.position = -1
-                self.balance -= commission
-                self.total_commission += commission
+                self.balance -= spread  # Open short position
+                self.total_commission += spread
                 self.trades_this_episode += 1
 
-                # Boost reward for profitable trades, reduce for losses
-                if base_reward > 0:
-                    reward = base_reward * 1.5  # 50% bonus for profitable trades
-                else:
-                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+                # Calculate final DSR reward with spread penalty
+                reward = dsr - self.alpha * (2 * spread)  # Double spread for two actions
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE LONG & OPEN SHORT - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE LONG & OPEN SHORT - PnL: ${pnl:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * 2 * spread:.4f}")
 
         elif action == 0:  # Out
             if self.position == 1:
                 # Closing long position
                 pnl = (price - self.entry_price) * self.lot_size * 100
-                base_reward = pnl - commission
-                self.balance += pnl - commission
+                self.balance += pnl - spread
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
-                self.total_commission += commission
+                self.total_commission += spread
 
-                # Boost reward for profitable trades, reduce for losses
-                if base_reward > 0:
-                    reward = base_reward * 1.5  # 50% bonus for profitable trades
-                else:
-                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+                # Calculate return and update DSR
+                new_equity = self.balance
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
+                
+                # DSR reward with spread penalty
+                reward = dsr - self.alpha * spread
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE LONG - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE LONG - PnL: ${pnl:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * spread:.4f}")
 
             elif self.position == -1:
                 # Closing short position
                 pnl = (self.entry_price - price) * self.lot_size * 100
-                base_reward = pnl - commission
-                self.balance += pnl - commission
+                self.balance += pnl - spread
                 self.position = 0
                 self.total_trades += 1
                 self.total_pnl += pnl
-                self.total_commission += commission
+                self.total_commission += spread
 
-                # Boost reward for profitable trades, reduce for losses
-                if base_reward > 0:
-                    reward = base_reward * 1.5  # 50% bonus for profitable trades
-                else:
-                    reward = base_reward * 0.8  # 20% penalty reduction for losses
+                # Calculate return and update DSR
+                new_equity = self.balance
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
+                
+                # DSR reward with spread penalty
+                reward = dsr - self.alpha * spread
 
                 if self.debug:
                     logger.info(
-                        f"Step {self.current_step}: CLOSE SHORT - PnL: ${pnl:.2f}, Reward: ${reward:.2f}")
+                        f"Step {self.current_step}: CLOSE SHORT - PnL: ${pnl:.2f}, DSR: {dsr:.4f}, Spread Penalty: {self.alpha * spread:.4f}")
 
             else:
-                # No position and choosing to stay out - SMALL POSITIVE REWARD
-                reward = 0.01  # Encourage patience when no good opportunities
+                # No position and choosing to stay out - Calculate DSR on current equity
+                new_equity = self.balance
+                return_t = self._calculate_return(old_equity, new_equity)
+                self.returns_history.append(return_t)
+                dsr = self._update_dsr_stats(return_t)
+                reward = dsr  # No spread penalty when staying out
 
         # Update equity
         if self.position != 0:
@@ -363,7 +473,7 @@ class TradingEnv(gym.Env):
                 'exit_price': price,
                 'position_type': 'long' if old_position == 1 else 'short',
                 'pnl': trade_pnl,
-                'commission': commission,
+                'commission': spread,
                 'duration': self.current_step - self.entry_step if hasattr(self, 'entry_step') else 0,
                 'reward': reward,
                 'balance': self.balance,
@@ -402,7 +512,13 @@ class TradingEnv(gym.Env):
             'total_pnl': self.total_pnl,
             'unrealized_pnl': unrealized_pnl,
             'price': price,
-            'commission': commission
+            'spread': spread,
+            # DSR-related metrics
+            'dsr_mu': self.mu,
+            'dsr_sigma': np.sqrt(self.sigma2),
+            'current_sharpe': self.mu / (np.sqrt(self.sigma2) + self.epsilon),
+            'prev_sharpe': self.prev_sharpe,
+            'last_return': self.returns_history[-1] if self.returns_history else 0.0
         }
 
         result = self._get_obs(), final_reward, done, False, info
