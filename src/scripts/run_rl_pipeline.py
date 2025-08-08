@@ -18,8 +18,8 @@ from src.RL.train_agent import train_agent
 from src.config.config import get_config
 from src.scripts.data_prep import load_data, check_missing_intervals
 
-# Configuration - using improved dataset for better reward improvement
-DATA_PATH = 'data/processed/xauusd_5m_improved.csv'
+# Configuration - using normalized improved dataset for better reward improvement
+DATA_PATH = 'data/processed/xauusd_5m_improved_normalized.csv'
 MODEL_PATH = 'outputs/models/ppo_trading.zip'
 
 CONFIG = get_config('deep_network')
