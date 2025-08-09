@@ -1,9 +1,9 @@
+import glob
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
-import glob
-import shutil
 
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent.parent
@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 import numpy as np
 import pandas as pd
 
-from src.RL.evaluate import analyze_trades as evaluate_with_trade_analysis
+from src.RL.evaluate import evaluate_with_trade_analysis
 from src.RL.plotting import plot_equity_curve
 from src.RL.train_agent import train_agent
 from src.config.config import get_config
@@ -33,7 +33,6 @@ import sys
 
 
 def handle_fresh_start():
-
     print(f"\n=== Fresh start requested ===")
     checkpoint_files = glob.glob('outputs/models/checkpoints/ppo_trading_*_steps.zip')
     for file in checkpoint_files:
@@ -206,7 +205,7 @@ if __name__ == '__main__':
     print(f"Comprehensive trade data with datetime written to {trades_csv_path}")
 
     # Write trade statistics to CSV
-    stats_csv_path = "outout/plots/trade_statistics.csv"
+    stats_csv_path = "outputs/plots/trade_statistics.csv"
     with open(stats_csv_path, mode="w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["metric", "value"])
